@@ -92,10 +92,23 @@ async function handleNewLead(data) {
 // HTTP health endpoint (for Render and load balancers)
 // ---------------------------------------------------------------------------
 
-const server = http.createServer((req, res) => {
+const server = http.createServer(async (req, res) => {
   if (req.method === "GET" && (req.url === "/health" || req.url === "/")) {
-    res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ status: "ok" }));
+    const dbConnected = mongoose.connection.readyState === 1;
+    const payload = {
+      status: dbConnected ? "ok" : "degraded",
+      database: dbConnected ? "connected" : "disconnected",
+    };
+    if (dbConnected) {
+      try {
+        payload.leadsCount = await Lead.countDocuments();
+      } catch (err) {
+        payload.leadsCount = null;
+        payload.dbError = err.message;
+      }
+    }
+    res.writeHead(dbConnected ? 200 : 503, { "Content-Type": "application/json" });
+    res.end(JSON.stringify(payload));
     return;
   }
   res.writeHead(404);
