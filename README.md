@@ -36,12 +36,15 @@ package.json
 
    Copy `.env.example` to `.env` and set:
 
+   - `MONGO_URL` – MongoDB connection string (e.g. `mongodb://localhost:27017` or full URI)
+   - `DB_NAME` – Database name (e.g. `whatsapp-leads`); optional if the DB is in the URL
    - `PORT` – HTTP port (default `3000`)
-   - `MONGO_URI` – MongoDB connection string
+
+   You can use `.env` or `.env.local`; `.env.local` overrides `.env`.
 
    ```bash
    cp .env.example .env
-   # Edit .env with your MONGO_URI and optional PORT
+   # Or create .env.local with MONGO_URL and DB_NAME
    ```
 
 3. **Run**
@@ -61,12 +64,13 @@ package.json
 
 ## Environment variables
 
-| Variable         | Required | Description                                      |
-|------------------|----------|--------------------------------------------------|
-| `PORT`           | No       | HTTP port (default `3000`)                      |
-| `MONGO_URI`      | Yes      | MongoDB connection string                        |
-| `WWEBJS_AUTH_PATH` | No     | Directory for WhatsApp session (default `.wwebjs_auth`) |
-| `LOG_LEVEL`      | No       | Winston level (default `info`)                   |
+| Variable           | Required | Description                                                        |
+|--------------------|----------|--------------------------------------------------------------------|
+| `MONGO_URL`        | Yes      | MongoDB connection string (or use `MONGO_URI`)                    |
+| `DB_NAME`          | No       | Database name (e.g. `whatsapp-leads`); used if set                  |
+| `PORT`             | No       | HTTP port (default `3000`)                                        |
+| `WWEBJS_AUTH_PATH` | No       | Directory for WhatsApp session (default `.wwebjs_auth`)            |
+| `LOG_LEVEL`        | No       | Winston level (default `info`)                                     |
 
 ## Lead schema (MongoDB)
 
@@ -82,7 +86,7 @@ Only the first message per phone is stored; later messages from the same number 
 - **Service type**: Use a **Web Service** (so Render can hit `GET /health` for liveness) or a **Background Worker** if you only need the process to run and don’t care about HTTP.
 - **Build**: `npm install` (or leave default).
 - **Start**: `npm start` (runs `node src/server.js`).
-- **Environment**: In Render dashboard, set `MONGO_URI` (and optionally `PORT`; Render sets `PORT` for Web Services).
+- **Environment**: In Render dashboard, set `MONGO_URL` (and optionally `DB_NAME`, `PORT`; Render sets `PORT` for Web Services).
 - **Persistent disk (important)**:
   - WhatsApp session is stored on disk (LocalAuth). Without a persistent disk, every deploy or restart will lose the session and require a new QR scan.
   - In Render: add a **Disk** to the service and mount it (e.g. `/data`).

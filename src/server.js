@@ -4,12 +4,13 @@
  * Deploy to Render:
  * - Use Web Service (for /health) or Background Worker.
  * - Start command: npm start
- * - Set env: MONGO_URI (required), optionally PORT, WWEBJS_AUTH_PATH.
+ * - Set env: MONGO_URL (or MONGO_URI) and optionally DB_NAME, PORT, WWEBJS_AUTH_PATH.
  * - Attach a persistent Disk and set WWEBJS_AUTH_PATH=/data/.wwebjs_auth
  *   so the WhatsApp session survives restarts and redeploys.
  * - Health path: GET /health → { status: "ok" }
  */
 require("dotenv").config();
+require("dotenv").config({ path: ".env.local", override: true });
 
 const http = require("http");
 const mongoose = require("mongoose");
@@ -18,7 +19,8 @@ const Lead = require("./models/Lead");
 const { initializeClient, destroyClient } = require("./whatsappClient");
 
 const PORT = Number(process.env.PORT) || 3000;
-const MONGO_URI = process.env.MONGO_URI || "mongodb://localhost:27017/whatsapp-leads";
+const MONGO_URL = process.env.MONGO_URL || process.env.MONGO_URI || "mongodb://localhost:27017/whatsapp-leads";
+const DB_NAME = process.env.DB_NAME || null;
 
 let isShuttingDown = false;
 
@@ -47,8 +49,9 @@ process.on("unhandledRejection", (reason, promise) => {
 // ---------------------------------------------------------------------------
 
 async function connectMongo() {
-  await mongoose.connect(MONGO_URI);
-  logger.info("MongoDB connected");
+  const options = DB_NAME ? { dbName: DB_NAME } : {};
+  await mongoose.connect(MONGO_URL, options);
+  logger.info("MongoDB connected" + (DB_NAME ? " (db: " + DB_NAME + ")" : ""));
 }
 
 async function disconnectMongo() {
