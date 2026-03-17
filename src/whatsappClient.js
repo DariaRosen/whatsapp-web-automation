@@ -82,8 +82,8 @@ function setupClientEvents(c) {
   c.on("message", async (message) => {
     try {
       if (message.fromMe) return;
-      if (String(message.from || "").includes("status")) return;
-      if (String(message.from || "").includes("@g.us")) return; // ignore group chats
+      const from = String(message.from || "");
+      if (from.includes("status") || from.includes("@g.us") || from.includes("@newsletter")) return;
       const body = message.body;
       if (!body || typeof body !== "string" || !body.trim()) return;
 
