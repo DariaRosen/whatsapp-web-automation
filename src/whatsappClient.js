@@ -83,6 +83,7 @@ function setupClientEvents(c) {
     try {
       if (message.fromMe) return;
       if (String(message.from || "").includes("status")) return;
+      if (String(message.from || "").includes("@g.us")) return; // ignore group chats
       const body = message.body;
       if (!body || typeof body !== "string" || !body.trim()) return;
 
