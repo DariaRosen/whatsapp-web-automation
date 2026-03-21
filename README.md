@@ -65,7 +65,7 @@ package.json
 
 4. **Web UI**
 
-   - **Dashboard:** `http://localhost:3000/dashboard` — leads table (sort, filter, print), status column saved to MongoDB, English / עברית.
+   - **Dashboard:** `http://localhost:3000/dashboard` — leads table (sort, filter, print), **Export Excel** (UTF-8 CSV that opens in Excel; respects current filter & sort), **ערכת נושא / theme** (dark, light, or system — saved in the browser), status column saved to MongoDB, English / עברית.
    - **QR page:** `http://localhost:3000/qr` — WhatsApp QR when login is needed, or “connected” when the session is active.
 
 5. **Health check**
@@ -101,7 +101,9 @@ Set `DASHBOARD_TOKEN` to a long random string. Then either:
 - **phone** (String, unique) – normalized (no `@c.us`)
 - **name** (String) – contact name if available
 - **firstMessage** (String) – first incoming text
-- **status** (String) – one of: `none`, `didnt_answer`, `not_interested`, `callback_later`, `waiting_more_details`, `from_me`, `waiting_client_details` (labels are EN/HE in the UI)
+- **status** (String) – one of: `none`, `didnt_answer`, `not_interested`, `callback_later`, `waiting_more_details`, `waiting_client_details` (labels are EN/HE in the UI)
+- **notes** (String) – free-text הערות, edited in the dashboard
+- **serviceTypes** (String[]) – multi-select: `business_card`, `landing_page`, `website`, `lead_management_system`, `ai_agent` (כרטיס ביקור, דף נחיתה, אתר, מערכת ניהול לידים, סוכן AI)
 - **createdAt** (Date)
 
 Only the first message per phone is stored; later messages from the same number are ignored (deduplication by `phone`).

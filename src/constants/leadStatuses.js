@@ -7,7 +7,6 @@ const LEAD_STATUS_KEYS = [
   "not_interested",
   "callback_later",
   "waiting_more_details",
-  "from_me",
   "waiting_client_details",
 ];
 

@@ -4,6 +4,7 @@ const QRCode = require("qrcode");
 const mongoose = require("mongoose");
 const Lead = require("./models/Lead");
 const { isValidStatus } = require("./constants/leadStatuses");
+const { isValidServiceTypesArray } = require("./constants/serviceTypes");
 const whatsappState = require("./whatsappState");
 const logger = require("./logger");
 
@@ -78,6 +79,8 @@ function createExpressApp() {
       const normalized = leads.map((doc) => ({
         ...doc,
         status: doc.status || "none",
+        notes: doc.notes != null ? doc.notes : "",
+        serviceTypes: Array.isArray(doc.serviceTypes) ? doc.serviceTypes : [],
       }));
       res.json({ leads: normalized });
     } catch (err) {
@@ -87,18 +90,48 @@ function createExpressApp() {
   });
 
   app.patch("/api/leads/:id", async (req, res) => {
-    const { status } = req.body || {};
-    if (!isValidStatus(status)) {
-      return res.status(400).json({ error: "Invalid status" });
+    const { status, notes, serviceTypes } = req.body || {};
+    const $set = {};
+
+    if (status !== undefined) {
+      if (!isValidStatus(status)) {
+        return res.status(400).json({ error: "Invalid status" });
+      }
+      $set.status = status;
     }
+    if (notes !== undefined) {
+      if (typeof notes !== "string") {
+        return res.status(400).json({ error: "Invalid notes" });
+      }
+      $set.notes = notes.slice(0, 8000);
+    }
+    if (serviceTypes !== undefined) {
+      if (!isValidServiceTypesArray(serviceTypes)) {
+        return res.status(400).json({ error: "Invalid serviceTypes" });
+      }
+      const order = new Map(SERVICE_TYPE_KEYS.map((k, i) => [k, i]));
+      $set.serviceTypes = [...new Set(serviceTypes)].sort((a, b) => order.get(a) - order.get(b));
+    }
+
+    if (Object.keys($set).length === 0) {
+      return res.status(400).json({ error: "No valid fields to update" });
+    }
+
     try {
       const updated = await Lead.findByIdAndUpdate(
         req.params.id,
-        { $set: { status } },
+        { $set },
         { new: true, runValidators: true }
       ).lean();
       if (!updated) return res.status(404).json({ error: "Lead not found" });
-      res.json({ lead: updated });
+      res.json({
+        lead: {
+          ...updated,
+          status: updated.status || "none",
+          notes: updated.notes != null ? updated.notes : "",
+          serviceTypes: Array.isArray(updated.serviceTypes) ? updated.serviceTypes : [],
+        },
+      });
     } catch (err) {
       logger.error("PATCH /api/leads/:id: " + err.message);
       res.status(500).json({ error: "Failed to update lead" });

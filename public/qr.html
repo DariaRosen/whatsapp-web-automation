@@ -1,11 +1,37 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark light" />
   <title>WhatsApp QR</title>
   <style>
-    :root { --bg: #0f1419; --card: #1a2332; --text: #e7ecf3; --muted: #8b9bb4; --accent: #3b82f6; --border: #2d3a4f; }
+    html[data-theme="dark"] {
+      color-scheme: dark;
+      --bg: #0f1419;
+      --card: #1a2332;
+      --text: #e7ecf3;
+      --muted: #8b9bb4;
+      --accent: #3b82f6;
+      --border: #2d3a4f;
+      --btn-bg: #2d3a4f;
+      --banner-bg: #422006;
+      --banner-text: #fed7aa;
+      --ok: #4ade80;
+    }
+    html[data-theme="light"] {
+      color-scheme: light;
+      --bg: #f1f5f9;
+      --card: #ffffff;
+      --text: #0f172a;
+      --muted: #64748b;
+      --accent: #2563eb;
+      --border: #e2e8f0;
+      --btn-bg: #e2e8f0;
+      --banner-bg: #fff7ed;
+      --banner-text: #9a3412;
+      --ok: #15803d;
+    }
     * { box-sizing: border-box; }
     body { font-family: system-ui, Segoe UI, Roboto, sans-serif; margin: 0; background: var(--bg); color: var(--text); min-height: 100vh; }
     body.rtl { direction: rtl; }
@@ -14,12 +40,24 @@
     h1 { font-size: 1.25rem; margin: 0 0 1rem; }
     img { max-width: 100%; height: auto; border-radius: 8px; background: #fff; padding: 0.5rem; }
     p { color: var(--muted); line-height: 1.5; font-size: 0.95rem; }
-    .ok { color: #4ade80; font-weight: 600; }
+    .ok { color: var(--ok); font-weight: 600; }
     a { color: var(--accent); }
-    .toolbar { margin-bottom: 1rem; display: flex; justify-content: center; gap: 0.5rem; flex-wrap: wrap; }
-    button { background: var(--border); color: var(--text); border: none; padding: 0.45rem 0.85rem; border-radius: 8px; cursor: pointer; }
-    .banner { background: #422006; color: #fed7aa; padding: 0.65rem; border-radius: 8px; margin-bottom: 1rem; font-size: 0.9rem; text-align: start; }
+    .toolbar { margin-bottom: 1rem; display: flex; justify-content: center; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+    select { background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 0.45rem 0.65rem; border-radius: 8px; font-size: 0.9rem; }
+    button { background: var(--btn-bg); color: var(--text); border: 1px solid var(--border); padding: 0.45rem 0.85rem; border-radius: 8px; cursor: pointer; }
+    .banner { background: var(--banner-bg); color: var(--banner-text); padding: 0.65rem; border-radius: 8px; margin-bottom: 1rem; font-size: 0.9rem; text-align: start; }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
   </style>
+  <script>
+    (function () {
+      try {
+        var k = "dashTheme";
+        var p = localStorage.getItem(k) || "dark";
+        var e = p === "auto" ? (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light") : p === "light" ? "light" : "dark";
+        document.documentElement.setAttribute("data-theme", e);
+      } catch (err) {}
+    })();
+  </script>
 </head>
 <body>
   <div class="wrap">
@@ -45,6 +83,10 @@
       disconnected: "Disconnected. A new QR may appear shortly — keep this page open.",
       dash: "Dashboard",
       authHint: "Unauthorized. Open /qr?token=YOUR_TOKEN or save token on the dashboard.",
+      themeLabel: "Theme",
+      theme_dark: "Dark",
+      theme_light: "Light",
+      theme_auto: "System",
     },
     he: {
       title: "התחברות לוואטסאפ",
@@ -114,6 +156,10 @@
     d.textContent = s;
     return d.innerHTML;
   }
+  document.getElementById("themeSelectQr").addEventListener("change", function () {
+    localStorage.setItem(THEME_KEY, this.value);
+    applyTheme();
+  });
   document.getElementById("btnLang").addEventListener("click", () => {
     localStorage.setItem("dashLang", lang() === "en" ? "he" : "en");
     applyLang();
