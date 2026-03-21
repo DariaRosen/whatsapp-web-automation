@@ -5,7 +5,7 @@
  * - Use Web Service (for /health, /dashboard, /qr).
  * - Start command: npm start
  * - Set env: MONGO_URL (or MONGO_URI), optionally DB_NAME, PORT, WWEBJS_AUTH_PATH.
- * - Optional DASHBOARD_TOKEN: require ?token= or x-dashboard-token for /dashboard, /qr, /api/*
+ * - Optional DASHBOARD_TOKEN: session cookie (via /login), header, or legacy ?token= for /dashboard, /qr, /api/*
  * - Attach a persistent Disk and set WWEBJS_AUTH_PATH=/data/.wwebjs_auth
  * - Health path: GET /health
  */

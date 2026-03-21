@@ -1,4 +1,7 @@
 const express = require("express");
+const cookieParser = require("cookie-parser");
+const helmet = require("helmet");
+const rateLimit = require("express-rate-limit");
 const path = require("path");
 const QRCode = require("qrcode");
 const mongoose = require("mongoose");
@@ -6,10 +9,19 @@ const Lead = require("./models/Lead");
 const { isValidStatus, LEAD_STATUS_DEFAULT } = require("./constants/leadStatuses");
 const { isValidServiceTypesArray, SERVICE_TYPE_KEYS } = require("./constants/serviceTypes");
 const { normalizePhoneInput } = require("./utils/phone");
+const { timingSafeEqualStrings } = require("./utils/cryptoUtils");
 const whatsappState = require("./whatsappState");
 const logger = require("./logger");
 
 const publicDir = path.join(__dirname, "..", "public");
+
+/** HttpOnly session cookie (value matches DASHBOARD_TOKEN; not exposed to JS). */
+const DASHBOARD_COOKIE_NAME = "dashboard_auth";
+
+function isQueryTokenDisabled() {
+  const v = process.env.DASHBOARD_DISABLE_QUERY_TOKEN;
+  return v === "1" || v === "true";
+}
 
 /**
  * Optional gate for dashboard + API. If unset, everything is open (dev only).
@@ -21,11 +33,19 @@ function dashboardAuth(req, res, next) {
   const fromHeader =
     req.headers["x-dashboard-token"] ||
     (req.headers.authorization && req.headers.authorization.replace(/^Bearer\s+/i, ""));
-  const provided = fromHeader || req.query.token;
-  if (provided === token) return next();
+  const fromCookie = req.cookies && req.cookies[DASHBOARD_COOKIE_NAME];
+  const fromQuery = isQueryTokenDisabled() ? undefined : req.query.token;
+
+  const candidates = [fromHeader, fromQuery, fromCookie].filter((x) => typeof x === "string" && x.length > 0);
+  for (const c of candidates) {
+    if (timingSafeEqualStrings(token, c)) return next();
+  }
 
   if (req.path.startsWith("/api")) {
-    return res.status(401).json({ error: "Unauthorized", hint: "Send x-dashboard-token or Bearer token" });
+    return res.status(401).json({
+      error: "Unauthorized",
+      hint: "Sign in at /login, send x-dashboard-token / Bearer, or use session cookie",
+    });
   }
   const returnTo = req.originalUrl || req.url || "/dashboard";
   const nextParam = encodeURIComponent(returnTo);
@@ -34,7 +54,40 @@ function dashboardAuth(req, res, next) {
 
 function createExpressApp() {
   const app = express();
+  const isProd = process.env.NODE_ENV === "production";
+
+  app.set("trust proxy", 1);
+
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          scriptSrc: ["'self'", "'unsafe-inline'"],
+          styleSrc: ["'self'", "'unsafe-inline'"],
+          imgSrc: ["'self'", "data:", "blob:"],
+          connectSrc: ["'self'"],
+          baseUri: ["'self'"],
+          formAction: ["'self'"],
+          frameAncestors: ["'none'"],
+          objectSrc: ["'none'"],
+        },
+      },
+      crossOriginEmbedderPolicy: false,
+    })
+  );
+
   app.use(express.json({ limit: "1mb" }));
+  app.use(cookieParser());
+
+  const dashboardLoginLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 8,
+    message: { error: "Too many sign-in attempts. Try again in a few minutes." },
+    standardHeaders: true,
+    legacyHeaders: false,
+    validate: { trustProxy: true },
+  });
 
   app.get("/health", async (req, res) => {
     const dbConnected = mongoose.connection.readyState === 1;
@@ -54,13 +107,45 @@ function createExpressApp() {
   });
 
   app.get("/", (req, res) => {
-    const qs = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
-    res.redirect(302, "/dashboard" + qs);
+    res.redirect(302, "/dashboard");
   });
 
   /** Public sign-in page when DASHBOARD_TOKEN is set (must be before dashboardAuth). */
   app.get("/login", (req, res) => {
     res.sendFile(path.join(publicDir, "login.html"));
+  });
+
+  /**
+   * Exchange the dashboard secret for an HttpOnly session cookie (no token in URL).
+   * Must stay before dashboardAuth.
+   */
+  app.post("/api/auth/dashboard-session", dashboardLoginLimiter, (req, res) => {
+    const expected = process.env.DASHBOARD_TOKEN;
+    if (!expected) {
+      return res.status(400).json({ error: "DASHBOARD_TOKEN is not configured" });
+    }
+    const bodyToken = typeof req.body?.token === "string" ? req.body.token.trim() : "";
+    if (!timingSafeEqualStrings(expected, bodyToken)) {
+      logger.info("Dashboard sign-in failed (invalid token)");
+      return res.status(401).json({ error: "Invalid token" });
+    }
+    res.cookie(DASHBOARD_COOKIE_NAME, bodyToken, {
+      httpOnly: true,
+      secure: isProd,
+      sameSite: "strict",
+      path: "/",
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+    return res.json({ ok: true });
+  });
+
+  app.post("/api/auth/dashboard-logout", (req, res) => {
+    res.clearCookie(DASHBOARD_COOKIE_NAME, {
+      path: "/",
+      secure: isProd,
+      sameSite: "strict",
+    });
+    return res.json({ ok: true });
   });
 
   app.use(dashboardAuth);

@@ -85,17 +85,45 @@ package.json
 | `WWEBJS_AUTH_PATH` | No       | Directory for WhatsApp session (default `.wwebjs_auth`)            |
 | `LOG_LEVEL`        | No       | Winston level (default `info`)                                     |
 | `DASHBOARD_TOKEN`  | No       | If set, required for `/dashboard`, `/qr`, and `/api/*` (see below) |
+| `DASHBOARD_DISABLE_QUERY_TOKEN` | No | If `1` or `true`, ignore `?token=` (use `/login` only; breaks legacy bookmarked URLs with token) |
 
 ### Securing the dashboard (production)
 
 Set `DASHBOARD_TOKEN` to a long random string. Then either:
 
-- Open **`/login`** on your deployed URL — paste the token and click **Connect** (then it’s saved in `localStorage` and you’re redirected with `?token=` once), or  
-- Open `/dashboard?token=YOUR_TOKEN` once (same effect), or  
-- Paste the token in the dashboard footer and click **Save**, or  
-- Send header `x-dashboard-token: YOUR_TOKEN` (or `Authorization: Bearer YOUR_TOKEN`) on API calls.
+- Open **`/login`** on your deployed URL — paste the token and click **Connect**. The server sets an **HttpOnly** session cookie (the token is **not** put in the URL).  
+- Paste the token in the dashboard footer and click **Save** (same cookie-based session).  
+- For scripts or `curl`, send header `x-dashboard-token: YOUR_TOKEN` (or `Authorization: Bearer YOUR_TOKEN`).  
+- Legacy: `?token=` in the URL is still accepted once and then exchanged for the cookie (avoid sharing links with the token in them). Set `DASHBOARD_DISABLE_QUERY_TOKEN=1` to **disable** query-string auth (stricter; use **`/login` only** — old `?token=` bookmarks will not work).
 
 `GET /health` stays **unauthenticated** for Render health checks.
+
+### Security model (what this app does / does not do)
+
+**Implemented**
+
+- **HttpOnly + Secure (production) + `SameSite=Strict`** session cookie — not readable by JavaScript; mitigates theft via typical XSS `document.cookie`.
+- **No token in the URL** after sign-in; optional **query token disabled** via env (see above).
+- **Timing-safe comparison** for the shared secret (reduces timing side-channels vs naive `===`).
+- **Rate limiting** on `POST /api/auth/dashboard-session` (brute-force resistance per IP behind your proxy).
+- **Helmet** security headers including **CSP** (tightened for this app; inline scripts are still allowed where required by the static HTML — see note below).
+- **Short-lived browser session** (cookie max-age **7 days**); sign in again after expiry.
+
+**Limits (honest)**
+
+- This is still a **single shared secret** (`DASHBOARD_TOKEN`), not per-user accounts, **2FA**, or **OAuth**. Anyone with the secret (or a stolen cookie) has full dashboard/API access until the cookie expires or you **rotate the secret** in hosting and invalidate sessions.
+- **XSS**: HttpOnly helps against *cookie exfiltration*, but malicious script on your origin can still **call your API** in the victim’s browser while the session is active. CSP reduces some attack classes; `'unsafe-inline'` is required for the current inline dashboard/login scripts — migrating to external JS + nonces would tighten this further.
+- **CSRF**: `SameSite=Strict` materially reduces cross-site cookie submission; state-changing APIs are not a separate “banking-grade” CSRF-token flow.
+- **Brute force**: Rate limiting helps; for higher assurance add network controls (e.g. allowlist IPs / VPN / Cloudflare Access) in front of the app.
+- **Multi-instance**: The cookie stores the same value the server compares to env — no server-side session store, so revocation is “change `DASHBOARD_TOKEN`” (all sessions invalid).
+
+**Checklist for stronger real-world posture**
+
+1. **HTTPS only** in production (e.g. Render) — already assumed for `Secure` cookies.  
+2. **Secret**: generate `DASHBOARD_TOKEN` with a CSPRNG (e.g. `openssl rand -hex 32`); never commit it.  
+3. **Rotate** the token if it may be exposed; treat it like a root password.  
+4. Optionally set **`DASHBOARD_DISABLE_QUERY_TOKEN=1`** once everyone uses `/login`.  
+5. For **maximum** isolation, put the dashboard behind **VPN**, **IP allowlist**, or an **identity proxy** (e.g. Cloudflare Access, Google IAP) — defense in depth beyond app code.
 
 ## Lead schema (MongoDB)
 

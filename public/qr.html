@@ -82,7 +82,7 @@
       waiting: "Starting… If a new login is required, a QR code will appear here.",
       disconnected: "Disconnected. A new QR may appear shortly — keep this page open.",
       dash: "Dashboard",
-      authHint: "Unauthorized. Open /qr?token=YOUR_TOKEN or save token on the dashboard.",
+      authHint: "Unauthorized. Open /login or save the token on the dashboard.",
       themeLabel: "Theme",
       theme_dark: "Dark",
       theme_light: "Light",
@@ -95,7 +95,7 @@
       waiting: "מתחיל… אם נדרשת התחברות מחדש, יופיע כאן קוד QR.",
       disconnected: "מנותק. עשוי להופיע QR חדש בקרוב — השאירו את הדף פתוח.",
       dash: "לוח בקרה",
-      authHint: "אין הרשאה. פתחו /qr?token=... או שמרו טוקן בלוח הבקרה.",
+      authHint: "אין הרשאה. פתחו /login או שמרו טוקן בלוח הבקרה.",
     },
   };
   function lang() { return localStorage.getItem("dashLang") || "en"; }
@@ -106,16 +106,25 @@
     document.getElementById("title").textContent = t("title");
     document.getElementById("sub").textContent = t("sub");
     document.getElementById("dashLink").textContent = t("dash");
-    const tok = getToken();
-    document.getElementById("dashLink").href = "/dashboard" + (tok ? "?token=" + encodeURIComponent(tok) : "");
+    document.getElementById("dashLink").href = "/dashboard";
   }
   function getToken() {
-    const q = new URLSearchParams(location.search).get("token");
-    if (q) {
-      localStorage.setItem("dashboardToken", q);
-      history.replaceState({}, "", location.pathname);
-    }
     return localStorage.getItem("dashboardToken") || "";
+  }
+  async function migrateUrlTokenToCookie() {
+    const q = new URLSearchParams(location.search).get("token");
+    if (!q) return;
+    try {
+      const res = await fetch("/api/auth/dashboard-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ token: q }),
+      });
+      if (res.ok) {
+        history.replaceState({}, "", location.pathname + location.hash);
+      }
+    } catch (err) {}
   }
   function headers() {
     const h = { Accept: "application/json" };
@@ -127,7 +136,7 @@
   let timer;
   async function poll() {
     try {
-      const res = await fetch("/api/whatsapp/qr", { headers: headers() });
+      const res = await fetch("/api/whatsapp/qr", { credentials: "include", headers: headers() });
       if (res.status === 401) {
         document.getElementById("authBanner").textContent = t("authHint");
         document.getElementById("authBanner").classList.remove("hidden");
@@ -156,18 +165,17 @@
     d.textContent = s;
     return d.innerHTML;
   }
-  document.getElementById("themeSelectQr").addEventListener("change", function () {
-    localStorage.setItem(THEME_KEY, this.value);
-    applyTheme();
-  });
   document.getElementById("btnLang").addEventListener("click", () => {
     localStorage.setItem("dashLang", lang() === "en" ? "he" : "en");
     applyLang();
   });
-  getToken();
-  applyLang();
-  poll();
-  timer = setInterval(poll, 2500);
+  (async function initQr() {
+    await migrateUrlTokenToCookie();
+    getToken();
+    applyLang();
+    poll();
+    timer = setInterval(poll, 2500);
+  })();
 })();
   </script>
 </body>

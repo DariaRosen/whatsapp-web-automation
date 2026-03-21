@@ -188,9 +188,10 @@
       noLeads: "No leads yet.",
       noMatches: "No rows match your filters.",
       loadError: "Could not load leads.",
-      authHint: "Add ?token=YOUR_TOKEN to the URL once, or save the token below and reload.",
+      authHint: "Open /login and sign in, or paste the token below and click Save (sets a secure session cookie).",
       tokenLabel: "Access token (if server uses DASHBOARD_TOKEN)",
       saveToken: "Save",
+      tokenSaveFailed: "Could not save token. Check it matches DASHBOARD_TOKEN.",
       addLead: "Add lead",
       addLeadTitle: "Add lead manually",
       actions: "Actions",
@@ -238,9 +239,10 @@
       noLeads: "אין לידים עדיין.",
       noMatches: "אין תוצאות לפי הסינון.",
       loadError: "לא ניתן לטעון לידים.",
-      authHint: "הוסיפו ?token=... לכתובת פעם אחת, או שמרו את הטוקן למטה ורעננו.",
+      authHint: "פתחו /login והתחברו, או הדביקו את הטוקן למטה ולחצו שמירה (ייווצר עוגיית סשן מאובטחת).",
       tokenLabel: "טוקן גישה (אם השרת משתמש ב-DASHBOARD_TOKEN)",
       saveToken: "שמור",
+      tokenSaveFailed: "לא ניתן לשמור את הטוקן. ודאו שהוא תואם ל-DASHBOARD_TOKEN.",
       addLead: "הוספת ליד",
       addLeadTitle: "הוספת ליד ידנית",
       actions: "פעולות",
@@ -369,12 +371,24 @@
   }
 
   function getToken() {
-    const q = new URLSearchParams(location.search).get("token");
-    if (q) {
-      localStorage.setItem("dashboardToken", q);
-      history.replaceState({}, "", location.pathname);
-    }
     return localStorage.getItem("dashboardToken") || "";
+  }
+
+  /** Legacy: ?token= in URL → exchange for HttpOnly cookie and strip query (no secret left in address bar). */
+  async function migrateUrlTokenToCookie() {
+    const q = new URLSearchParams(location.search).get("token");
+    if (!q) return;
+    try {
+      const res = await fetch("/api/auth/dashboard-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ token: q }),
+      });
+      if (res.ok) {
+        history.replaceState({}, "", location.pathname + location.hash);
+      }
+    } catch (err) {}
   }
 
   function authHeaders() {
@@ -553,6 +567,7 @@
   async function patchLead(id, body) {
     const res = await fetch("/api/leads/" + id, {
       method: "PATCH",
+      credentials: "include",
       headers: authHeaders(),
       body: JSON.stringify(body),
     });
@@ -561,6 +576,22 @@
     const idx = leads.findIndex((l) => l._id === id);
     if (idx >= 0) leads[idx] = data.lead;
     return data.lead;
+  }
+
+  async function onRemoveLeadClick(e) {
+    const id = e.target && e.target.dataset && e.target.dataset.id;
+    if (!id || !window.confirm(t("deleteConfirm"))) return;
+    try {
+      const res = await fetch("/api/leads/" + encodeURIComponent(id), {
+        method: "DELETE",
+        credentials: "include",
+        headers: authHeaders(),
+      });
+      if (!res.ok) throw new Error();
+      await loadLeads();
+    } catch (err) {
+      alert(t("loadError"));
+    }
   }
 
   async function onStatusChange(e) {
@@ -623,7 +654,7 @@
     const banner = document.getElementById("authBanner");
     banner.classList.add("hidden");
     try {
-      const res = await fetch("/api/leads", { headers: authHeaders() });
+      const res = await fetch("/api/leads", { credentials: "include", headers: authHeaders() });
       if (res.status === 401) {
         banner.textContent = t("authHint");
         banner.classList.remove("hidden");
@@ -661,6 +692,7 @@
     try {
       const res = await fetch("/api/leads", {
         method: "POST",
+        credentials: "include",
         headers: authHeaders(),
         body: JSON.stringify({ phone, name, firstMessage }),
       });
@@ -698,17 +730,30 @@
       renderTable();
     });
   });
-  document.getElementById("btnSaveToken").addEventListener("click", () => {
+  document.getElementById("btnSaveToken").addEventListener("click", async () => {
     const v = document.getElementById("tokenInput").value.trim();
-    if (v) localStorage.setItem("dashboardToken", v);
-    document.getElementById("tokenInput").value = "";
-    updateQrLink();
-    loadLeads();
+    if (!v) return;
+    try {
+      const res = await fetch("/api/auth/dashboard-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ token: v }),
+      });
+      if (!res.ok) {
+        alert(t("tokenSaveFailed"));
+        return;
+      }
+      document.getElementById("tokenInput").value = "";
+      updateQrLink();
+      await loadLeads();
+    } catch (err) {
+      alert(t("tokenSaveFailed"));
+    }
   });
   function updateQrLink() {
     const a = document.getElementById("linkQr");
-    const tok = getToken();
-    a.href = "/qr" + (tok ? "?token=" + encodeURIComponent(tok) : "");
+    a.href = "/qr";
   }
 
   const initialLang = getLang();
@@ -716,9 +761,12 @@
   document.body.classList.toggle("rtl", initialLang === "he");
   document.getElementById("tokenInput").value = "";
   applyI18n();
-  getToken();
-  updateQrLink();
-  loadLeads();
+  (async function initDashboard() {
+    await migrateUrlTokenToCookie();
+    getToken();
+    updateQrLink();
+    await loadLeads();
+  })();
 })();
   </script>
 </body>

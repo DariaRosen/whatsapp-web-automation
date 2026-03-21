@@ -191,7 +191,7 @@
         <div id="errBox" class="err" role="alert"></div>
         <button type="submit" class="btn-connect" id="btnConnect">Connect</button>
       </form>
-      <p class="hint" id="hint">The token is stored in this browser only (localStorage). It is sent to the server over HTTPS when you open the app.</p>
+      <p class="hint" id="hint">After you connect, the server stores an HttpOnly session cookie (not visible to JavaScript). Avoid sharing your screen while signed in.</p>
     </div>
   </div>
   <script>
@@ -215,7 +215,9 @@
       hide: "הסתר טוקן",
       connect: "התחבר",
       empty: "הדביקו את הטוקן.",
-      hint: "הטוקן נשמר בדפדפן בלבד (localStorage) ונשלח לשרת ב-HTTPS בפתיחת האפליקציה.",
+      hint: "לאחר ההתחברות השרת יוצר עוגיית סשן HttpOnly (לא נגישה לסקריפטים). הימנעו משיתוף מסך בזמן שאתם מחוברים.",
+      badToken: "טוקן שגוי. ודאו ש-DASHBOARD_TOKEN תואם לשרת הזה.",
+      netError: "לא ניתן להגיע לשרת. נסו שוב.",
     },
   };
   function lang() { return localStorage.getItem("dashLang") || "en"; }
@@ -259,7 +261,7 @@
     inp.type = inp.type === "password" ? "text" : "password";
     document.getElementById("btnToggleVis").textContent = inp.type === "password" ? t("show") : t("hide");
   });
-  document.getElementById("form").addEventListener("submit", (e) => {
+  document.getElementById("form").addEventListener("submit", async (e) => {
     e.preventDefault();
     hideErr();
     const raw = document.getElementById("token").value.trim();
@@ -267,10 +269,32 @@
       showErr(t("empty"));
       return;
     }
-    localStorage.setItem("dashboardToken", raw);
-    const next = getNextPath();
-    const sep = next.includes("?") ? "&" : "?";
-    window.location.href = next + sep + "token=" + encodeURIComponent(raw);
+    const btn = document.getElementById("btnConnect");
+    btn.disabled = true;
+    try {
+      const res = await fetch("/api/auth/dashboard-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ token: raw }),
+      });
+      if (res.status === 401) {
+        showErr(t("badToken"));
+        return;
+      }
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        if (data && data.error) showErr(String(data.error));
+        else showErr(t("netError"));
+        return;
+      }
+      const next = getNextPath();
+      window.location.href = next;
+    } catch (err) {
+      showErr(t("netError"));
+    } finally {
+      btn.disabled = false;
+    }
   });
   applyLang();
 })();
