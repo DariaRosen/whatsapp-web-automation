@@ -10,6 +10,7 @@ const { isValidStatus, LEAD_STATUS_DEFAULT } = require("./constants/leadStatuses
 const { isValidServiceTypesArray, SERVICE_TYPE_KEYS } = require("./constants/serviceTypes");
 const { normalizePhoneInput } = require("./utils/phone");
 const { timingSafeEqualStrings } = require("./utils/cryptoUtils");
+const { isHttpsRequest } = require("./utils/httpsRequest");
 const whatsappState = require("./whatsappState");
 const logger = require("./logger");
 
@@ -54,7 +55,6 @@ function dashboardAuth(req, res, next) {
 
 function createExpressApp() {
   const app = express();
-  const isProd = process.env.NODE_ENV === "production";
 
   app.set("trust proxy", 1);
 
@@ -112,6 +112,7 @@ function createExpressApp() {
 
   /** Public sign-in page when DASHBOARD_TOKEN is set (must be before dashboardAuth). */
   app.get("/login", (req, res) => {
+    res.setHeader("Cache-Control", "private, no-store, must-revalidate");
     res.sendFile(path.join(publicDir, "login.html"));
   });
 
@@ -129,10 +130,11 @@ function createExpressApp() {
       logger.info("Dashboard sign-in failed (invalid token)");
       return res.status(401).json({ error: "Invalid token" });
     }
+    const cookieSecure = isHttpsRequest(req);
     res.cookie(DASHBOARD_COOKIE_NAME, bodyToken, {
       httpOnly: true,
-      secure: isProd,
-      sameSite: "strict",
+      secure: cookieSecure,
+      sameSite: "lax",
       path: "/",
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
@@ -142,8 +144,8 @@ function createExpressApp() {
   app.post("/api/auth/dashboard-logout", (req, res) => {
     res.clearCookie(DASHBOARD_COOKIE_NAME, {
       path: "/",
-      secure: isProd,
-      sameSite: "strict",
+      secure: isHttpsRequest(req),
+      sameSite: "lax",
     });
     return res.json({ ok: true });
   });
@@ -151,10 +153,12 @@ function createExpressApp() {
   app.use(dashboardAuth);
 
   app.get("/dashboard", (req, res) => {
+    res.setHeader("Cache-Control", "private, no-store, must-revalidate");
     res.sendFile(path.join(publicDir, "dashboard.html"));
   });
 
   app.get("/qr", (req, res) => {
+    res.setHeader("Cache-Control", "private, no-store, must-revalidate");
     res.sendFile(path.join(publicDir, "qr.html"));
   });
 
@@ -169,6 +173,7 @@ function createExpressApp() {
   }
 
   app.get("/api/leads", async (req, res) => {
+    res.setHeader("Cache-Control", "private, no-store, must-revalidate");
     try {
       const leads = await Lead.find({ removedAt: null }).sort({ createdAt: -1 }).lean();
       res.json({ leads: leads.map(formatLeadDoc) });

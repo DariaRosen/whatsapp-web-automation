@@ -189,6 +189,7 @@
       noMatches: "No rows match your filters.",
       loadError: "Could not load leads.",
       authHint: "Open /login and sign in, or paste the token below and click Save (sets a secure session cookie).",
+      authApi401: "Not signed in or session invalid. Open /login and connect again, or paste the token below and click Save.",
       tokenLabel: "Access token (if server uses DASHBOARD_TOKEN)",
       saveToken: "Save",
       tokenSaveFailed: "Could not save token. Check it matches DASHBOARD_TOKEN.",
@@ -240,6 +241,7 @@
       noMatches: "אין תוצאות לפי הסינון.",
       loadError: "לא ניתן לטעון לידים.",
       authHint: "פתחו /login והתחברו, או הדביקו את הטוקן למטה ולחצו שמירה (ייווצר עוגיית סשן מאובטחת).",
+      authApi401: "אין סשן או שהסשן פג תוקף. פתחו /login והתחברו שוב, או הדביקו את הטוקן למטה ולחצו שמירה.",
       tokenLabel: "טוקן גישה (אם השרת משתמש ב-DASHBOARD_TOKEN)",
       saveToken: "שמור",
       tokenSaveFailed: "לא ניתן לשמור את הטוקן. ודאו שהוא תואם ל-DASHBOARD_TOKEN.",
@@ -399,6 +401,8 @@
   }
 
   let leads = [];
+  /** True when /api/leads returned 401 — must not show as "no leads". */
+  let sessionUnauthorized = false;
   let sortKey = "createdAt";
   let sortDir = "desc";
 
@@ -492,10 +496,19 @@
   }
 
   function renderTable() {
-    const rows = sortLeads(filteredLeads());
     const tbody = document.getElementById("tbody");
     const table = document.getElementById("table");
     const empty = document.getElementById("empty");
+    if (sessionUnauthorized) {
+      table.classList.add("hidden");
+      empty.classList.remove("hidden");
+      empty.textContent = t("authApi401");
+      const banner = document.getElementById("authBanner");
+      banner.textContent = t("authApi401");
+      banner.classList.remove("hidden");
+      return;
+    }
+    const rows = sortLeads(filteredLeads());
     document.querySelectorAll("th[data-sort]").forEach((th) => {
       th.classList.remove("sorted", "desc");
       if (th.dataset.sort === sortKey) {
@@ -656,17 +669,22 @@
     try {
       const res = await fetch("/api/leads", { credentials: "include", headers: authHeaders() });
       if (res.status === 401) {
-        banner.textContent = t("authHint");
-        banner.classList.remove("hidden");
+        sessionUnauthorized = true;
         leads = [];
-        renderTable();
+        banner.textContent = t("authApi401");
+        banner.classList.remove("hidden");
+        document.getElementById("table").classList.add("hidden");
+        document.getElementById("empty").classList.remove("hidden");
+        document.getElementById("empty").textContent = t("authApi401");
         return;
       }
+      sessionUnauthorized = false;
       if (!res.ok) throw new Error();
       const data = await res.json();
       leads = data.leads || [];
       renderTable();
     } catch {
+      sessionUnauthorized = false;
       leads = [];
       document.getElementById("empty").classList.remove("hidden");
       document.getElementById("empty").textContent = t("loadError");
