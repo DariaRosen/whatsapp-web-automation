@@ -692,6 +692,21 @@
     }
   }
 
+  const openAddLeadModal = () => {
+    const backdrop = document.getElementById("modalBackdrop");
+    backdrop.classList.remove("hidden");
+    backdrop.setAttribute("aria-hidden", "false");
+    const phoneEl = document.getElementById("addPhone");
+    if (phoneEl) phoneEl.focus();
+  };
+
+  const closeAddLeadModal = () => {
+    const backdrop = document.getElementById("modalBackdrop");
+    backdrop.classList.add("hidden");
+    backdrop.setAttribute("aria-hidden", "true");
+    document.getElementById("formAddLead").reset();
+  };
+
   document.getElementById("themeSelect").addEventListener("change", function () {
     localStorage.setItem(THEME_KEY, this.value);
     applyTheme();
