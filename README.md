@@ -152,6 +152,7 @@ Only the first message per phone is stored for **active** leads; later messages 
   - WhatsApp session is stored on disk (LocalAuth). Without a persistent disk, every deploy or restart will lose the session and require a new QR scan.
   - In Render: add a **Disk** to the service and mount it (e.g. `/data`).
   - Set env var: `WWEBJS_AUTH_PATH=/data/.wwebjs_auth` so session files live on the persistent volume.
+- **QR not showing on `/qr`**: The page polls the server; a QR appears only after the WhatsApp client emits a `qr` event (usually within 1–2 minutes while Chromium starts). If you only see “disconnected” or a status line, open **Render → Logs** — look for Puppeteer/Chromium errors (`init_error`, sandbox, memory). Free/small instances often need a **paid** plan or more RAM for headless Chrome. After deploys, confirm the latest code is live and `WWEBJS_AUTH_PATH` points to a **persistent** disk.
 - **Health**: For Web Service, set health path to `GET /health`. Render will use it to decide if the instance is healthy.
 - **Graceful shutdown**: The app handles `SIGTERM` (and `SIGINT`): it closes the HTTP server, destroys the WhatsApp client, and disconnects MongoDB before exiting.
 

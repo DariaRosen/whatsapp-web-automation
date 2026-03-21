@@ -319,6 +319,7 @@ function createExpressApp() {
   });
 
   app.get("/api/whatsapp/qr", async (req, res) => {
+    res.setHeader("Cache-Control", "private, no-store, must-revalidate");
     try {
       const state = whatsappState.getState();
       if (state.ready) {

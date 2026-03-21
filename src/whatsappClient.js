@@ -63,7 +63,8 @@ function setupClientEvents(c) {
 
   c.on("authenticated", () => {
     logger.info("WhatsApp session authenticated.");
-    whatsappState.clearQr();
+    // Do NOT clearQr here — "authenticated" can fire before "ready"; clearing would drop the
+    // QR string from /api/whatsapp/qr while the user still needs to finish pairing. setReady(true) clears it.
   });
 
   c.on("auth_failure", (msg) => {

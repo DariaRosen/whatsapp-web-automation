@@ -40,6 +40,7 @@
     h1 { font-size: 1.25rem; margin: 0 0 1rem; }
     img { max-width: 100%; height: auto; border-radius: 8px; background: #fff; padding: 0.5rem; }
     p { color: var(--muted); line-height: 1.5; font-size: 0.95rem; }
+    .detail { font-size: 0.8rem; color: var(--muted); margin-top: 0.75rem; word-break: break-word; font-family: ui-monospace, monospace; opacity: 0.9; }
     .ok { color: var(--ok); font-weight: 600; }
     a { color: var(--accent); }
     .toolbar { margin-bottom: 1rem; display: flex; justify-content: center; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
@@ -79,8 +80,9 @@
       title: "WhatsApp login",
       sub: "Open WhatsApp on your phone → Settings → Linked devices → Link a device, then scan the code below.",
       connected: "Connected — session is active.",
-      waiting: "Starting… If a new login is required, a QR code will appear here.",
-      disconnected: "Disconnected. A new QR may appear shortly — keep this page open.",
+      waiting: "Starting the WhatsApp client… If login is required, a QR code will appear here within 1–2 minutes. Keep this page open.",
+      disconnected: "Session disconnected or still reconnecting. A QR will show when the server is ready — wait up to ~2 minutes, or check Render logs if nothing appears.",
+      detailPrefix: "Server status:",
       dash: "Dashboard",
       authHint: "Unauthorized. Open /login or save the token on the dashboard.",
       themeLabel: "Theme",
@@ -92,8 +94,9 @@
       title: "התחברות לוואטסאפ",
       sub: "בטלפון: וואטסאפ → הגדרות → מכשירים מקושרים → קישור מכשיר, וסרקו את הקוד למטה.",
       connected: "מחובר — הסשן פעיל.",
-      waiting: "מתחיל… אם נדרשת התחברות מחדש, יופיע כאן קוד QR.",
-      disconnected: "מנותק. עשוי להופיע QR חדש בקרוב — השאירו את הדף פתוח.",
+      waiting: "מפעיל את לקוח וואטסאפ… אם נדרשת התחברות, יופיע QR תוך דקה–שתיים. השאירו את הדף פתוח.",
+      disconnected: "הסשן התנתק או מתחבר מחדש. QR יופיע כשהשרת מוכן — המתינו עד כ־2 דקות, או בדקו לוגים ב-Render אם לא מופיע.",
+      detailPrefix: "סטטוס שרת:",
       dash: "לוח בקרה",
       authHint: "אין הרשאה. פתחו /login או שמרו טוקן בלוח הבקרה.",
     },
@@ -155,7 +158,16 @@
       }
       let msg = t("waiting");
       if (data.lastDisconnectReason) msg = t("disconnected");
-      el.innerHTML = "<p>" + escapeHtml(msg) + "</p>";
+      let html = "<p>" + escapeHtml(msg) + "</p>";
+      if (data.lastDisconnectReason) {
+        html +=
+          '<p class="detail">' +
+          escapeHtml(t("detailPrefix")) +
+          " " +
+          escapeHtml(String(data.lastDisconnectReason)) +
+          "</p>";
+      }
+      el.innerHTML = html;
     } catch {
       el.innerHTML = "<p>" + escapeHtml(t("waiting")) + "</p>";
     }
