@@ -70,6 +70,15 @@
     .msg { white-space: pre-wrap; word-break: break-word; max-width: 22rem; font-size: 0.88rem; }
     .banner { background: var(--banner-bg); color: var(--banner-text); padding: 0.65rem 1rem; border-radius: 8px; margin-bottom: 1rem; font-size: 0.9rem; }
     .token-row { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border); font-size: 0.85rem; color: var(--muted); }
+    .btn-danger { background: #991b1b; color: #fff; border: 1px solid #b91c1c; font-size: 0.8rem; padding: 0.35rem 0.55rem; }
+    html[data-theme="light"] .btn-danger { background: #dc2626; }
+    .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 1rem; }
+    .modal { background: var(--card); color: var(--text); border: 1px solid var(--border); border-radius: 12px; padding: 1.25rem; max-width: 28rem; width: 100%; max-height: 90vh; overflow-y: auto; }
+    .modal h2 { margin: 0 0 1rem; font-size: 1.1rem; }
+    .modal label { display: block; margin-bottom: 0.75rem; font-size: 0.9rem; }
+    .modal input, .modal textarea { width: 100%; margin-top: 0.25rem; }
+    .modal textarea { min-height: 4rem; resize: vertical; }
+    .modal-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 1rem; }
     .hidden { display: none !important; }
     .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
   </style>
@@ -99,6 +108,7 @@
         <label><span class="sr-only" id="themeLabel">Theme</span>
           <select id="themeSelect" aria-labelledby="themeLabel"></select>
         </label>
+        <button type="button" id="btnAddLead" class="secondary">Add lead</button>
         <button type="button" id="btnPrint" class="secondary">Print</button>
         <button type="button" id="btnExportExcel" class="secondary">Export Excel</button>
         <button type="button" id="btnLang" class="secondary" aria-label="Toggle language">עב / EN</button>
@@ -117,6 +127,7 @@
             <th class="nosort" id="thServices">Service types</th>
             <th class="nosort" id="thNotes">Notes</th>
             <th data-sort="createdAt" id="thDate">Created</th>
+            <th class="nosort" id="thActions">Actions</th>
           </tr>
         </thead>
         <tbody id="tbody"></tbody>
@@ -127,6 +138,26 @@
         <input type="password" id="tokenInput" style="margin-inline-start:0.5rem;width:14rem;" autocomplete="off" />
         <button type="button" id="btnSaveToken" class="secondary" style="margin-inline-start:0.35rem;">Save</button>
       </label>
+    </div>
+    <div id="modalBackdrop" class="modal-backdrop hidden no-print" role="presentation" aria-hidden="true">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+        <h2 id="modalTitle">Add lead</h2>
+        <form id="formAddLead">
+          <label><span id="lblAddPhone">Phone</span>
+            <input type="text" name="phone" id="addPhone" required autocomplete="tel" inputmode="numeric" />
+          </label>
+          <label><span id="lblAddName">Name</span>
+            <input type="text" name="name" id="addName" autocomplete="name" />
+          </label>
+          <label><span id="lblAddMsg">First message</span>
+            <textarea name="firstMessage" id="addFirstMessage" required rows="3"></textarea>
+          </label>
+          <div class="modal-actions">
+            <button type="submit" id="btnSubmitAdd">Save</button>
+            <button type="button" class="secondary" id="btnCancelAdd">Cancel</button>
+          </div>
+        </form>
+      </div>
     </div>
   </div>
   <script>
@@ -160,6 +191,15 @@
       authHint: "Add ?token=YOUR_TOKEN to the URL once, or save the token below and reload.",
       tokenLabel: "Access token (if server uses DASHBOARD_TOKEN)",
       saveToken: "Save",
+      addLead: "Add lead",
+      addLeadTitle: "Add lead manually",
+      actions: "Actions",
+      removeLead: "Remove",
+      deleteConfirm: "Remove this lead from the list? It will stay hidden and WhatsApp will not add it again for this phone number.",
+      cancel: "Cancel",
+      save: "Save",
+      duplicatePhone: "A lead with this phone number already exists.",
+      addLeadError: "Could not save the lead.",
       statuses: {
         none: "—",
         didnt_answer: "Didn't answer",
@@ -201,6 +241,15 @@
       authHint: "הוסיפו ?token=... לכתובת פעם אחת, או שמרו את הטוקן למטה ורעננו.",
       tokenLabel: "טוקן גישה (אם השרת משתמש ב-DASHBOARD_TOKEN)",
       saveToken: "שמור",
+      addLead: "הוספת ליד",
+      addLeadTitle: "הוספת ליד ידנית",
+      actions: "פעולות",
+      removeLead: "הסרה",
+      deleteConfirm: "להסיר את הליד מהרשימה? הוא יישאר מוסתר ולא יתווסף שוב מוואטסאפ לאותו מספר.",
+      cancel: "ביטול",
+      save: "שמירה",
+      duplicatePhone: "כבר קיים ליד עם מספר טלפון זה.",
+      addLeadError: "לא ניתן לשמור את הליד.",
       statuses: {
         none: "—",
         didnt_answer: "לא ענה",
@@ -242,19 +291,54 @@
     return T[getLang()].services[key] || key;
   }
 
+  const THEME_KEY = "dashTheme";
+  const THEME_PREFS = ["dark", "light", "auto"];
+
+  function getEffectiveTheme() {
+    const pref = localStorage.getItem(THEME_KEY) || "dark";
+    if (pref === "auto") {
+      return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    }
+    return pref === "light" ? "light" : "dark";
+  }
+
+  function applyTheme() {
+    document.documentElement.setAttribute("data-theme", getEffectiveTheme());
+  }
+
+  let themeMediaBound = false;
+  function bindThemeMediaQuery() {
+    if (themeMediaBound) return;
+    themeMediaBound = true;
+    window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+      if ((localStorage.getItem(THEME_KEY) || "dark") === "auto") applyTheme();
+    });
+  }
+
   function applyI18n() {
     document.getElementById("pageTitle").textContent = t("title");
     document.getElementById("thPhone").textContent = t("phone");
     document.getElementById("thName").textContent = t("name");
     document.getElementById("thMsg").textContent = t("firstMessage");
     document.getElementById("thStatus").textContent = t("status");
+    document.getElementById("thServices").textContent = t("serviceTypes");
+    document.getElementById("thNotes").textContent = t("notes");
     document.getElementById("thDate").textContent = t("createdAt");
+    document.getElementById("thActions").textContent = t("actions");
     document.getElementById("search").placeholder = t("searchPh");
+    document.getElementById("themeLabel").textContent = t("themeLabel");
+    document.getElementById("btnAddLead").textContent = t("addLead");
     document.getElementById("btnPrint").textContent = t("print");
     document.getElementById("btnExportExcel").textContent = t("exportExcel");
     document.getElementById("linkQr").textContent = t("linkQr");
     document.getElementById("tokenLabel").textContent = t("tokenLabel");
     document.getElementById("btnSaveToken").textContent = t("saveToken");
+    document.getElementById("modalTitle").textContent = t("addLeadTitle");
+    document.getElementById("lblAddPhone").textContent = t("phone");
+    document.getElementById("lblAddName").textContent = t("name");
+    document.getElementById("lblAddMsg").textContent = t("firstMessage");
+    document.getElementById("btnSubmitAdd").textContent = t("save");
+    document.getElementById("btnCancelAdd").textContent = t("cancel");
     const ff = document.getElementById("statusFilter");
     const cur = ff.value;
     ff.innerHTML = "";
@@ -303,6 +387,62 @@
   let leads = [];
   let sortKey = "createdAt";
   let sortDir = "desc";
+
+  function getVisibleLeads() {
+    return sortLeads(filteredLeads());
+  }
+
+  function csvEscape(value) {
+    const s = value == null ? "" : String(value);
+    if (/[",\r\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+    return s;
+  }
+
+  function handleExportExcel() {
+    const rows = getVisibleLeads();
+    if (!rows.length) {
+      alert(t("exportEmpty"));
+      return;
+    }
+    const headers = [
+      t("phone"),
+      t("name"),
+      t("firstMessage"),
+      t("status"),
+      t("serviceTypes"),
+      t("notes"),
+      t("createdAt"),
+    ];
+    const lines = [headers.map(csvEscape).join(",")];
+    rows.forEach((row) => {
+      const st = (row.serviceTypes || []).map((k) => serviceLabel(k)).join("; ");
+      const created = row.createdAt ? new Date(row.createdAt).toLocaleString() : "";
+      const status = statusLabel(row.status || "none");
+      lines.push(
+        [
+          csvEscape(row.phone || ""),
+          csvEscape(row.name || ""),
+          csvEscape(row.firstMessage || ""),
+          csvEscape(status),
+          csvEscape(st),
+          csvEscape(row.notes || ""),
+          csvEscape(created),
+        ].join(",")
+      );
+    });
+    const bom = "\ufeff";
+    const blob = new Blob([bom + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const stamp = new Date().toISOString().slice(0, 19).replace(/:/g, "-");
+    a.href = url;
+    a.download = "leads-" + stamp + ".csv";
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
 
   function sortLeads(list) {
     const dir = sortDir === "asc" ? 1 : -1;
@@ -372,12 +512,21 @@
           (k) => `<option value="${k}"${k === st ? " selected" : ""}>${escapeHtml(statusLabel(k))}</option>`
         ).join("");
         const date = row.createdAt ? new Date(row.createdAt).toLocaleString() : "";
+        const notesVal = escapeHtml(row.notes || "");
+        const svc = Array.isArray(row.serviceTypes) ? row.serviceTypes : [];
+        const checks = SERVICE_TYPE_KEYS.map((k) => {
+          const idCh = "svc-" + id + "-" + k;
+          return `<label><input type="checkbox" class="svc-cb" data-lead-id="${id}" data-svc="${k}" id="${idCh}"${svc.includes(k) ? " checked" : ""} /><span>${escapeHtml(serviceLabel(k))}</span></label>`;
+        }).join("");
         return `<tr data-id="${id}">
           <td>${escapeHtml(row.phone || "")}</td>
           <td>${escapeHtml(row.name || "")}</td>
           <td class="msg">${escapeHtml(row.firstMessage || "")}</td>
           <td><select class="status-select" data-id="${id}" aria-label="${escapeHtml(t("status"))}">${opts}</select></td>
+          <td><div class="service-types" role="group" aria-label="${escapeHtml(t("serviceTypes"))}">${checks}</div></td>
+          <td><textarea class="notes-input" data-id="${id}" rows="2" aria-label="${escapeHtml(t("notes"))}">${notesVal}</textarea></td>
           <td>${escapeHtml(date)}</td>
+          <td class="no-print"><button type="button" class="btn-danger remove-lead-btn" data-id="${id}">${escapeHtml(t("removeLead"))}</button></td>
         </tr>`;
       })
       .join("");
@@ -389,6 +538,9 @@
     });
     tbody.querySelectorAll(".notes-input").forEach((ta) => {
       ta.addEventListener("blur", onNotesBlur);
+    });
+    tbody.querySelectorAll(".remove-lead-btn").forEach((btn) => {
+      btn.addEventListener("click", onRemoveLeadClick);
     });
   }
 
@@ -494,6 +646,38 @@
   document.getElementById("themeSelect").addEventListener("change", function () {
     localStorage.setItem(THEME_KEY, this.value);
     applyTheme();
+  });
+  document.getElementById("btnAddLead").addEventListener("click", openAddLeadModal);
+  document.getElementById("btnCancelAdd").addEventListener("click", closeAddLeadModal);
+  document.getElementById("modalBackdrop").addEventListener("click", (e) => {
+    if (e.target.id === "modalBackdrop") closeAddLeadModal();
+  });
+  document.getElementById("formAddLead").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const phone = document.getElementById("addPhone").value.trim();
+    const name = document.getElementById("addName").value.trim();
+    const firstMessage = document.getElementById("addFirstMessage").value.trim();
+    if (!phone || !firstMessage) return;
+    try {
+      const res = await fetch("/api/leads", {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({ phone, name, firstMessage }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 409) {
+        alert(t("duplicatePhone"));
+        return;
+      }
+      if (!res.ok) throw new Error();
+      closeAddLeadModal();
+      await loadLeads();
+    } catch (err) {
+      alert(t("addLeadError"));
+    }
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeAddLeadModal();
   });
   document.getElementById("btnLang").addEventListener("click", () => {
     setLang(getLang() === "en" ? "he" : "en");

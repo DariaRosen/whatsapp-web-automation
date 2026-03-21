@@ -7,7 +7,6 @@ const leadSchema = new mongoose.Schema(
     phone: {
       type: String,
       required: true,
-      unique: true,
       trim: true,
     },
     name: {
@@ -40,6 +39,11 @@ const leadSchema = new mongoose.Schema(
       ],
       default: [],
     },
+    /** When set, lead is hidden from dashboard and WhatsApp will not re-create this phone. */
+    removedAt: {
+      type: Date,
+      default: null,
+    },
     createdAt: {
       type: Date,
       default: Date.now,
@@ -48,6 +52,15 @@ const leadSchema = new mongoose.Schema(
   {
     timestamps: false,
     versionKey: false,
+  }
+);
+
+// Unique phone among active (non-removed) leads only
+leadSchema.index(
+  { phone: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { removedAt: null },
   }
 );
 

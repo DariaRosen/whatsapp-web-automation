@@ -98,7 +98,8 @@ Set `DASHBOARD_TOKEN` to a long random string. Then either:
 
 ## Lead schema (MongoDB)
 
-- **phone** (String, unique) – normalized (no `@c.us`)
+- **phone** (String) – unique among **active** leads only (see `removedAt`); normalized input (no `@c.us`)
+- **removedAt** (Date | null) – when set, lead is hidden from the dashboard; **WhatsApp will not create a new lead** for the same phone (user chose “remove”). Manual add can **reactivate** the same row.
 - **name** (String) – contact name if available
 - **firstMessage** (String) – first incoming text
 - **status** (String) – one of: `none`, `didnt_answer`, `not_interested`, `callback_later`, `waiting_more_details`, `waiting_client_details` (labels are EN/HE in the UI)
@@ -106,7 +107,11 @@ Set `DASHBOARD_TOKEN` to a long random string. Then either:
 - **serviceTypes** (String[]) – multi-select: `business_card`, `landing_page`, `website`, `lead_management_system`, `ai_agent` (כרטיס ביקור, דף נחיתה, אתר, מערכת ניהול לידים, סוכן AI)
 - **createdAt** (Date)
 
-Only the first message per phone is stored; later messages from the same number are ignored (deduplication by `phone`).
+Only the first message per phone is stored for **active** leads; later messages from the same number are ignored (deduplication by `phone`). Removed phones stay in the DB with `removedAt` set so they are not re-added from WhatsApp.
+
+**API:** `GET /api/leads` (active only), `POST /api/leads` (manual add; reactivates a removed lead with the same phone), `DELETE /api/leads/:id` (soft-delete).
+
+**MongoDB migration:** If you upgraded from a version with a global unique index on `phone`, drop the old index once so Mongoose can create the partial unique index: in Compass or `mongosh`, `db.leads.dropIndex("phone_1")` (name may vary), then restart the app to sync indexes.
 
 ## Deploying to Render
 

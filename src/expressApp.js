@@ -3,8 +3,9 @@ const path = require("path");
 const QRCode = require("qrcode");
 const mongoose = require("mongoose");
 const Lead = require("./models/Lead");
-const { isValidStatus } = require("./constants/leadStatuses");
-const { isValidServiceTypesArray } = require("./constants/serviceTypes");
+const { isValidStatus, LEAD_STATUS_DEFAULT } = require("./constants/leadStatuses");
+const { isValidServiceTypesArray, SERVICE_TYPE_KEYS } = require("./constants/serviceTypes");
+const { normalizePhoneInput } = require("./utils/phone");
 const whatsappState = require("./whatsappState");
 const logger = require("./logger");
 
@@ -49,7 +50,7 @@ function createExpressApp() {
     };
     if (dbConnected) {
       try {
-        payload.leadsCount = await Lead.countDocuments();
+        payload.leadsCount = await Lead.countDocuments({ removedAt: null });
       } catch (err) {
         payload.leadsCount = null;
         payload.dbError = err.message;
@@ -73,16 +74,20 @@ function createExpressApp() {
     res.sendFile(path.join(publicDir, "qr.html"));
   });
 
+  function formatLeadDoc(doc) {
+    if (!doc) return null;
+    return {
+      ...doc,
+      status: doc.status || "none",
+      notes: doc.notes != null ? doc.notes : "",
+      serviceTypes: Array.isArray(doc.serviceTypes) ? doc.serviceTypes : [],
+    };
+  }
+
   app.get("/api/leads", async (req, res) => {
     try {
-      const leads = await Lead.find().sort({ createdAt: -1 }).lean();
-      const normalized = leads.map((doc) => ({
-        ...doc,
-        status: doc.status || "none",
-        notes: doc.notes != null ? doc.notes : "",
-        serviceTypes: Array.isArray(doc.serviceTypes) ? doc.serviceTypes : [],
-      }));
-      res.json({ leads: normalized });
+      const leads = await Lead.find({ removedAt: null }).sort({ createdAt: -1 }).lean();
+      res.json({ leads: leads.map(formatLeadDoc) });
     } catch (err) {
       logger.error("GET /api/leads: " + err.message);
       res.status(500).json({ error: "Failed to load leads" });
@@ -118,23 +123,109 @@ function createExpressApp() {
     }
 
     try {
+      const current = await Lead.findById(req.params.id).lean();
+      if (!current || current.removedAt) return res.status(404).json({ error: "Lead not found" });
+
       const updated = await Lead.findByIdAndUpdate(
         req.params.id,
         { $set },
         { new: true, runValidators: true }
       ).lean();
       if (!updated) return res.status(404).json({ error: "Lead not found" });
-      res.json({
-        lead: {
-          ...updated,
-          status: updated.status || "none",
-          notes: updated.notes != null ? updated.notes : "",
-          serviceTypes: Array.isArray(updated.serviceTypes) ? updated.serviceTypes : [],
-        },
-      });
+      res.json({ lead: formatLeadDoc(updated) });
     } catch (err) {
       logger.error("PATCH /api/leads/:id: " + err.message);
       res.status(500).json({ error: "Failed to update lead" });
+    }
+  });
+
+  app.delete("/api/leads/:id", async (req, res) => {
+    try {
+      const updated = await Lead.findOneAndUpdate(
+        { _id: req.params.id, removedAt: null },
+        { $set: { removedAt: new Date() } },
+        { new: true }
+      ).lean();
+      if (!updated) return res.status(404).json({ error: "Lead not found" });
+      logger.info("Lead soft-deleted: " + updated.phone);
+      res.json({ ok: true, id: String(updated._id) });
+    } catch (err) {
+      logger.error("DELETE /api/leads/:id: " + err.message);
+      res.status(500).json({ error: "Failed to remove lead" });
+    }
+  });
+
+  app.post("/api/leads", async (req, res) => {
+    const body = req.body || {};
+    const phone = normalizePhoneInput(body.phone);
+    const firstMessage = typeof body.firstMessage === "string" ? body.firstMessage.trim() : "";
+    const name = typeof body.name === "string" ? body.name.trim() : "";
+
+    if (!phone) {
+      return res.status(400).json({ error: "phone is required" });
+    }
+    if (!firstMessage) {
+      return res.status(400).json({ error: "firstMessage is required" });
+    }
+
+    const status =
+      body.status !== undefined && isValidStatus(body.status) ? body.status : LEAD_STATUS_DEFAULT;
+    let notes = "";
+    if (body.notes !== undefined) {
+      if (typeof body.notes !== "string") {
+        return res.status(400).json({ error: "Invalid notes" });
+      }
+      notes = body.notes.slice(0, 8000);
+    }
+    let serviceTypes = [];
+    if (body.serviceTypes !== undefined) {
+      if (!isValidServiceTypesArray(body.serviceTypes)) {
+        return res.status(400).json({ error: "Invalid serviceTypes" });
+      }
+      const order = new Map(SERVICE_TYPE_KEYS.map((k, i) => [k, i]));
+      serviceTypes = [...new Set(body.serviceTypes)].sort((a, b) => order.get(a) - order.get(b));
+    }
+
+    try {
+      const existing = await Lead.findOne({ phone }).lean();
+      if (existing && !existing.removedAt) {
+        return res.status(409).json({ error: "A lead with this phone already exists" });
+      }
+
+      if (existing && existing.removedAt) {
+        const updated = await Lead.findByIdAndUpdate(
+          existing._id,
+          {
+            $set: {
+              removedAt: null,
+              name,
+              firstMessage,
+              status,
+              notes,
+              serviceTypes,
+            },
+          },
+          { new: true, runValidators: true }
+        ).lean();
+        return res.status(200).json({ lead: formatLeadDoc(updated), reactivated: true });
+      }
+
+      const created = await Lead.create({
+        phone,
+        name,
+        firstMessage,
+        status,
+        notes,
+        serviceTypes,
+      });
+      const doc = created.toObject();
+      res.status(201).json({ lead: formatLeadDoc(doc), reactivated: false });
+    } catch (err) {
+      logger.error("POST /api/leads: " + err.message);
+      if (err.code === 11000) {
+        return res.status(409).json({ error: "A lead with this phone already exists" });
+      }
+      res.status(500).json({ error: "Failed to create lead" });
     }
   });
 

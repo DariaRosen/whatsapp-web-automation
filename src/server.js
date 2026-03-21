@@ -64,6 +64,10 @@ async function handleNewLead(data) {
   try {
     const existing = await Lead.findOne({ phone }).lean();
     if (existing) {
+      if (existing.removedAt) {
+        logger.info("Skipping WhatsApp save — phone was removed by user: " + phone);
+        return;
+      }
       logger.debug("Lead already exists for phone " + phone + ", skipping");
       return;
     }
