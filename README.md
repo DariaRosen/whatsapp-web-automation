@@ -90,7 +90,8 @@ package.json
 
 Set `DASHBOARD_TOKEN` to a long random string. Then either:
 
-- Open `/dashboard?token=YOUR_TOKEN` once (saved in browser `localStorage`), or  
+- Open **`/login`** on your deployed URL — paste the token and click **Connect** (then it’s saved in `localStorage` and you’re redirected with `?token=` once), or  
+- Open `/dashboard?token=YOUR_TOKEN` once (same effect), or  
 - Paste the token in the dashboard footer and click **Save**, or  
 - Send header `x-dashboard-token: YOUR_TOKEN` (or `Authorization: Bearer YOUR_TOKEN`) on API calls.
 

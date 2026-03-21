@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark light" />
+  <title>Sign in</title>
+  <style>
+    html[data-theme="dark"] {
+      color-scheme: dark;
+      --bg: #0c1222;
+      --card: #151d2e;
+      --text: #e8edf5;
+      --muted: #94a3b8;
+      --accent: #3b82f6;
+      --accent-hover: #2563eb;
+      --border: #2d3a50;
+      --input-bg: #0f1419;
+      --focus: rgba(59, 130, 246, 0.35);
+    }
+    html[data-theme="light"] {
+      color-scheme: light;
+      --bg: #f0f4f8;
+      --card: #ffffff;
+      --text: #0f172a;
+      --muted: #64748b;
+      --accent: #2563eb;
+      --accent-hover: #1d4ed8;
+      --border: #e2e8f0;
+      --input-bg: #f8fafc;
+      --focus: rgba(37, 99, 235, 0.25);
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      background-image:
+        radial-gradient(ellipse 120% 80% at 50% -20%, rgba(59, 130, 246, 0.12), transparent),
+        radial-gradient(ellipse 60% 40% at 100% 50%, rgba(139, 92, 246, 0.06), transparent);
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+    }
+    body.rtl { direction: rtl; }
+    .shell { width: 100%; max-width: 420px; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 2rem 1.75rem;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.35);
+    }
+    .logo {
+      width: 48px; height: 48px;
+      border-radius: 12px;
+      background: linear(135deg, #25d366, #128c7e);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.5rem;
+      margin: 0 auto 1.25rem;
+    }
+    h1 {
+      font-size: 1.35rem;
+      font-weight: 700;
+      margin: 0 0 0.35rem;
+      text-align: center;
+      letter-spacing: -0.02em;
+    }
+    .sub {
+      font-size: 0.9rem;
+      color: var(--muted);
+      line-height: 1.5;
+      text-align: center;
+      margin: 0 0 1.5rem;
+    }
+    label {
+      display: block;
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      margin-bottom: 0.4rem;
+    }
+    input[type="password"], input[type="text"] {
+      width: 100%;
+      padding: 0.75rem 1rem;
+      font-size: 1rem;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--input-bg);
+      color: var(--text);
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    input:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--focus);
+    }
+    .toggle-vis {
+      font-size: 0.8rem;
+      color: var(--accent);
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 0.25rem 0;
+      margin-top: 0.35rem;
+      text-decoration: underline;
+    }
+    .btn-connect {
+      width: 100%;
+      margin-top: 1.25rem;
+      padding: 0.8rem 1rem;
+      font-size: 1rem;
+      font-weight: 600;
+      color: #fff;
+      background: var(--accent);
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .btn-connect:hover { background: var(--accent-hover); }
+    .btn-connect:focus-visible {
+      outline: none;
+      box-shadow: 0 0 0 3px var(--focus);
+    }
+    .btn-connect:disabled { opacity: 0.6; cursor: not-allowed; }
+    .toolbar {
+      display: flex;
+      justify-content: center;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+    .btn-ghost {
+      background: var(--border);
+      color: var(--text);
+      border: 1px solid var(--border);
+      padding: 0.4rem 0.75rem;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      cursor: pointer;
+    }
+    .hint {
+      margin-top: 1.25rem;
+      padding-top: 1.25rem;
+      border-top: 1px solid var(--border);
+      font-size: 0.8rem;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+    .err {
+      display: none;
+      margin-top: 0.75rem;
+      padding: 0.6rem 0.75rem;
+      border-radius: 8px;
+      background: rgba(220, 38, 38, 0.12);
+      color: #f87171;
+      font-size: 0.875rem;
+    }
+    .err.show { display: block; }
+  </style>
+  <script>
+    (function () {
+      try {
+        var k = "dashTheme";
+        var p = localStorage.getItem(k) || "dark";
+        var e = p === "auto" ? (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light") : p === "light" ? "light" : "dark";
+        document.documentElement.setAttribute("data-theme", e);
+      } catch (err) {}
+    })();
+  </script>
+</head>
+<body>
+  <div class="shell">
+    <div class="toolbar">
+      <button type="button" class="btn-ghost" id="btnLang" aria-label="Toggle language">עב / EN</button>
+      <button type="button" class="btn-ghost" id="btnTheme" aria-label="Toggle theme">◐</button>
+    </div>
+    <div class="card">
+      <div class="logo" aria-hidden="true">💬</div>
+      <h1 id="title">Sign in</h1>
+      <p class="sub" id="sub">Paste the access token from your hosting dashboard (e.g. Render → Environment → DASHBOARD_TOKEN).</p>
+      <form id="form" novalidate>
+        <label for="token" id="lblToken">Access token</label>
+        <input type="password" id="token" name="token" autocomplete="current-password" required aria-describedby="sub errBox" />
+        <button type="button" class="toggle-vis" id="btnToggleVis" tabindex="0">Show token</button>
+        <div id="errBox" class="err" role="alert"></div>
+        <button type="submit" class="btn-connect" id="btnConnect">Connect</button>
+      </form>
+      <p class="hint" id="hint">The token is stored in this browser only (localStorage). It is sent to the server over HTTPS when you open the app.</p>
+    </div>
+  </div>
+  <script>
+(function () {
+  const T = {
+    en: {
+      title: "Sign in",
+      sub: "Paste the access token from your hosting dashboard (e.g. Render → Environment → DASHBOARD_TOKEN).",
+      tokenLabel: "Access token",
+      show: "Show token",
+      hide: "Hide token",
+      connect: "Connect",
+      empty: "Please paste your token.",
+      hint: "The token is stored in this browser only (localStorage). It is sent to the server over HTTPS when you open the app.",
+    },
+    he: {
+      title: "התחברות",
+      sub: "הדביקו את טוקן הגישה מלוח הבקרה של האחסון (למשל Render → Environment → DASHBOARD_TOKEN).",
+      tokenLabel: "טוקן גישה",
+      show: "הצג טוקן",
+      hide: "הסתר טוקן",
+      connect: "התחבר",
+      empty: "הדביקו את הטוקן.",
+      hint: "הטוקן נשמר בדפדפן בלבד (localStorage) ונשלח לשרת ב-HTTPS בפתיחת האפליקציה.",
+    },
+  };
+  function lang() { return localStorage.getItem("dashLang") || "en"; }
+  function t(k) { return T[lang()][k] || k; }
+  function applyLang() {
+    document.documentElement.lang = lang();
+    document.body.classList.toggle("rtl", lang() === "he");
+    document.getElementById("title").textContent = t("title");
+    document.getElementById("sub").textContent = t("sub");
+    document.getElementById("lblToken").textContent = t("tokenLabel");
+    document.getElementById("btnConnect").textContent = t("connect");
+    document.getElementById("hint").textContent = t("hint");
+    const vis = document.getElementById("token").type === "password";
+    document.getElementById("btnToggleVis").textContent = vis ? t("show") : t("hide");
+  }
+  function getNextPath() {
+    const q = new URLSearchParams(location.search).get("next");
+    if (q && q.startsWith("/") && !q.startsWith("//")) return q;
+    return "/dashboard";
+  }
+  function showErr(msg) {
+    const el = document.getElementById("errBox");
+    el.textContent = msg;
+    el.classList.add("show");
+  }
+  function hideErr() {
+    document.getElementById("errBox").classList.remove("show");
+  }
+  document.getElementById("btnLang").addEventListener("click", () => {
+    localStorage.setItem("dashLang", lang() === "en" ? "he" : "en");
+    applyLang();
+  });
+  document.getElementById("btnTheme").addEventListener("click", () => {
+    const cur = localStorage.getItem("dashTheme") || "dark";
+    const next = cur === "light" ? "dark" : "light";
+    localStorage.setItem("dashTheme", next);
+    document.documentElement.setAttribute("data-theme", next);
+  });
+  document.getElementById("btnToggleVis").addEventListener("click", () => {
+    const inp = document.getElementById("token");
+    inp.type = inp.type === "password" ? "text" : "password";
+    document.getElementById("btnToggleVis").textContent = inp.type === "password" ? t("show") : t("hide");
+  });
+  document.getElementById("form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    hideErr();
+    const raw = document.getElementById("token").value.trim();
+    if (!raw) {
+      showErr(t("empty"));
+      return;
+    }
+    localStorage.setItem("dashboardToken", raw);
+    const next = getNextPath();
+    const sep = next.includes("?") ? "&" : "?";
+    window.location.href = next + sep + "token=" + encodeURIComponent(raw);
+  });
+  applyLang();
+})();
+  </script>
+</body>
+</html>

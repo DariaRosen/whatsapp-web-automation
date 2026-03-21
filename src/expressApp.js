@@ -27,15 +27,9 @@ function dashboardAuth(req, res, next) {
   if (req.path.startsWith("/api")) {
     return res.status(401).json({ error: "Unauthorized", hint: "Send x-dashboard-token or Bearer token" });
   }
-  return res.status(401).type("html").send(getUnauthorizedHtml());
-}
-
-function getUnauthorizedHtml() {
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Unauthorized</title></head><body>
-<p>Set <code>DASHBOARD_TOKEN</code> in the server environment, then open:</p>
-<p><code>/dashboard?token=YOUR_TOKEN</code> or <code>/qr?token=YOUR_TOKEN</code></p>
-<p>Or save the token in the dashboard (localStorage) after loading with <code>?token=</code> once.</p>
-</body></html>`;
+  const returnTo = req.originalUrl || req.url || "/dashboard";
+  const nextParam = encodeURIComponent(returnTo);
+  return res.redirect(302, "/login?next=" + nextParam);
 }
 
 function createExpressApp() {
@@ -62,6 +56,11 @@ function createExpressApp() {
   app.get("/", (req, res) => {
     const qs = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
     res.redirect(302, "/dashboard" + qs);
+  });
+
+  /** Public sign-in page when DASHBOARD_TOKEN is set (must be before dashboardAuth). */
+  app.get("/login", (req, res) => {
+    res.sendFile(path.join(publicDir, "login.html"));
   });
 
   app.use(dashboardAuth);
