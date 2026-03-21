@@ -52,23 +52,29 @@ function setupClientEvents(c) {
   c.on("qr", (qr) => {
     logger.info("QR code received. Scan with WhatsApp on your phone.");
     qrcode.generate(qr, { small: true });
+    whatsappState.setQr(qr);
   });
 
   c.on("ready", () => {
     reconnectAttempt = 0;
     logger.info("WhatsApp client is ready and connected.");
+    whatsappState.setReady(true);
   });
 
   c.on("authenticated", () => {
     logger.info("WhatsApp session authenticated.");
+    whatsappState.clearQr();
   });
 
   c.on("auth_failure", (msg) => {
-    logger.error("WhatsApp authentication failed: " + (msg || "Unknown reason"));
+    const detail = msg || "Unknown reason";
+    logger.error("WhatsApp authentication failed: " + detail);
+    whatsappState.setDisconnected("auth_failure: " + String(detail));
   });
 
   c.on("disconnected", (reason) => {
     logger.warn("WhatsApp client disconnected. Reason: " + (reason || "unknown"));
+    whatsappState.setDisconnected(reason || "disconnected");
     destroyClient();
     const delayMs = getReconnectDelayMs();
     reconnectAttempt += 1;

@@ -24,6 +24,7 @@ function setReady(ready) {
 
 function setDisconnected(reason) {
   isReady = false;
+  latestQrString = null;
   lastDisconnectReason = reason || "unknown";
 }
 
