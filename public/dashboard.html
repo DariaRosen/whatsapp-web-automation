@@ -69,6 +69,14 @@
     select.status-select { min-width: 11rem; max-width: 100%; }
     .msg { white-space: pre-wrap; word-break: break-word; max-width: 22rem; font-size: 0.88rem; }
     .banner { background: var(--banner-bg); color: var(--banner-text); padding: 0.65rem 1rem; border-radius: 8px; margin-bottom: 1rem; font-size: 0.9rem; }
+    .wa-qr-banner { background: rgba(37, 99, 235, 0.12); color: var(--text); border: 1px solid rgba(37, 99, 235, 0.35); }
+    .wa-qr-inner { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; justify-content: space-between; }
+    .wa-qr-copy { flex: 1; min-width: 12rem; }
+    .wa-qr-copy strong { display: block; font-size: 0.95rem; }
+    .wa-qr-body { margin: 0.4rem 0 0; line-height: 1.45; color: var(--muted); font-size: 0.88rem; }
+    .wa-qr-thumb { border-radius: 8px; background: #fff; padding: 4px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15); flex-shrink: 0; }
+    .wa-pill { font-size: 0.72rem; padding: 0.2rem 0.55rem; border-radius: 999px; background: rgba(34, 197, 94, 0.18); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.4); white-space: nowrap; }
+    html[data-theme="light"] .wa-pill { color: #15803d; }
     .token-row { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border); font-size: 0.85rem; color: var(--muted); }
     .btn-danger { background: #991b1b; color: #fff; border: 1px solid #b91c1c; font-size: 0.8rem; padding: 0.35rem 0.55rem; }
     html[data-theme="light"] .btn-danger { background: #dc2626; }
@@ -96,6 +104,16 @@
 <body>
   <div class="wrap">
     <div class="no-print banner hidden" id="authBanner" role="alert"></div>
+    <div class="no-print banner wa-qr-banner hidden" id="waQrBanner" role="status" aria-live="polite">
+      <div class="wa-qr-inner">
+        <div class="wa-qr-copy">
+          <strong id="waQrTitle"></strong>
+          <p id="waQrBody" class="wa-qr-body"></p>
+        </div>
+        <img id="waQrImg" class="wa-qr-thumb hidden" alt="" width="112" height="112" />
+        <a class="btn secondary" id="waQrCta" href="/qr"></a>
+      </div>
+    </div>
     <header class="no-print">
       <h1 id="pageTitle">Leads</h1>
       <div class="toolbar">
@@ -112,6 +130,7 @@
         <button type="button" id="btnPrint" class="secondary">Print</button>
         <button type="button" id="btnExportExcel" class="secondary">Export Excel</button>
         <button type="button" id="btnLang" class="secondary" aria-label="Toggle language">עב / EN</button>
+        <span class="wa-pill hidden" id="waStatusPill" role="status"></span>
         <a class="btn secondary nav" id="linkQr" href="/qr">QR</a>
       </div>
     </header>
@@ -217,6 +236,13 @@
         lead_management_system: "Lead management system",
         ai_agent: "AI agent",
       },
+      waBannerTitleScan: "Connect WhatsApp",
+      waBannerBodyScan: "Scan this QR with your phone: WhatsApp → Settings → Linked devices → Link a device. New leads from WhatsApp only work after the session is active.",
+      waBannerBodyWaiting: "WhatsApp is not connected yet. Open the QR page and scan when a code appears (same as the server logs).",
+      waBannerBodyDisconnected: "WhatsApp session ended or disconnected. Open the QR page to sign in again.",
+      waOpenQr: "Open QR page",
+      waConnectedPill: "WhatsApp connected",
+      waQrAlt: "WhatsApp QR code",
     },
     he: {
       title: "לידים",
@@ -269,6 +295,13 @@
         lead_management_system: "מערכת ניהול לידים",
         ai_agent: "סוכן AI",
       },
+      waBannerTitleScan: "חיבור וואטסאפ",
+      waBannerBodyScan: "סרקו את ה-QR בטלפון: וואטסאפ → הגדרות → מכשירים מקושרים → קישור מכשיר. לידים חדשים מוואטסאפ יגיעו רק אחרי שהסשן פעיל.",
+      waBannerBodyWaiting: "וואטסאפ עדיין לא מחובר. פתחו את דף ה-QR וסרקו כשיופיע קוד (כמו בלוגים של השרת).",
+      waBannerBodyDisconnected: "הסשן של וואטסאפ נגמר או התנתק. פתחו את דף ה-QR כדי להתחבר שוב.",
+      waOpenQr: "פתיחת דף QR",
+      waConnectedPill: "וואטסאפ מחובר",
+      waQrAlt: "קוד QR לוואטסאפ",
     },
   };
 
@@ -370,6 +403,7 @@
     applyTheme();
     bindThemeMediaQuery();
     renderTable();
+    refreshWhatsAppBanner();
   }
 
   function getToken() {
@@ -393,6 +427,13 @@
     } catch (err) {}
   }
 
+  let leads = [];
+  /** True when /api/leads returned 401 — must not show as "no leads". */
+  let sessionUnauthorized = false;
+  let waPollId = null;
+  let sortKey = "createdAt";
+  let sortDir = "desc";
+
   function authHeaders() {
     const tok = getToken();
     const h = { Accept: "application/json", "Content-Type": "application/json" };
@@ -400,11 +441,75 @@
     return h;
   }
 
-  let leads = [];
-  /** True when /api/leads returned 401 — must not show as "no leads". */
-  let sessionUnauthorized = false;
-  let sortKey = "createdAt";
-  let sortDir = "desc";
+  /** Polls the same WhatsApp state as /qr (in-memory on server — not log files). */
+  async function refreshWhatsAppBanner() {
+    const banner = document.getElementById("waQrBanner");
+    const pill = document.getElementById("waStatusPill");
+    const img = document.getElementById("waQrImg");
+    const titleEl = document.getElementById("waQrTitle");
+    const bodyEl = document.getElementById("waQrBody");
+    const cta = document.getElementById("waQrCta");
+    if (!banner || !titleEl || !bodyEl || !cta) return;
+    try {
+      const res = await fetch("/api/whatsapp/qr", {
+        credentials: "include",
+        headers: { Accept: "application/json" },
+      });
+      if (res.status === 401) {
+        banner.classList.add("hidden");
+        if (pill) pill.classList.add("hidden");
+        return;
+      }
+      if (!res.ok) throw new Error("wa");
+      const data = await res.json();
+      cta.textContent = t("waOpenQr");
+
+      if (data.ready) {
+        banner.classList.add("hidden");
+        if (img) {
+          img.classList.add("hidden");
+          img.removeAttribute("src");
+        }
+        if (pill) {
+          pill.textContent = t("waConnectedPill");
+          pill.classList.remove("hidden");
+        }
+        return;
+      }
+
+      if (pill) pill.classList.add("hidden");
+
+      titleEl.textContent = t("waBannerTitleScan");
+      if (data.needsScan && data.qrDataUrl) {
+        bodyEl.textContent = t("waBannerBodyScan");
+        if (img) {
+          img.src = data.qrDataUrl;
+          img.alt = t("waQrAlt");
+          img.classList.remove("hidden");
+        }
+        banner.classList.remove("hidden");
+        return;
+      }
+
+      bodyEl.textContent = data.lastDisconnectReason
+        ? t("waBannerBodyDisconnected")
+        : t("waBannerBodyWaiting");
+      if (img) {
+        img.classList.add("hidden");
+        img.removeAttribute("src");
+      }
+      banner.classList.remove("hidden");
+    } catch (err) {
+      banner.classList.add("hidden");
+      if (pill) pill.classList.add("hidden");
+    }
+  }
+
+  function startWhatsAppStatusPolling() {
+    if (waPollId) clearInterval(waPollId);
+    refreshWhatsAppBanner();
+    waPollId = setInterval(refreshWhatsAppBanner, 10000);
+  }
 
   function getVisibleLeads() {
     return sortLeads(filteredLeads());
@@ -799,6 +904,7 @@
     getToken();
     updateQrLink();
     await loadLeads();
+    startWhatsAppStatusPolling();
   })();
 })();
   </script>
