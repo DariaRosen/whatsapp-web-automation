@@ -1,6 +1,7 @@
 const { Client, LocalAuth } = require("whatsapp-web.js");
 const qrcode = require("qrcode-terminal");
 const logger = require("./logger");
+const whatsappState = require("./whatsappState");
 
 const RECONNECT_BACKOFF_MS = [5000, 10000, 30000];
 const MAX_BACKOFF_INDEX = RECONNECT_BACKOFF_MS.length - 1;
@@ -137,6 +138,7 @@ function initializeClient(onNewLead) {
   setupClientEvents(client);
 
   client.initialize().catch((err) => {
+    whatsappState.setDisconnected("init_error: " + err.message);
     logger.error("WhatsApp client failed to initialize: " + err.message);
     destroyClient();
     const delayMs = getReconnectDelayMs();

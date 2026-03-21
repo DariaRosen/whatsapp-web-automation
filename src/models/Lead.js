@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const { LEAD_STATUS_KEYS, LEAD_STATUS_DEFAULT } = require("../constants/leadStatuses");
 
 const leadSchema = new mongoose.Schema(
   {
@@ -17,6 +18,11 @@ const leadSchema = new mongoose.Schema(
       type: String,
       required: true,
       trim: true,
+    },
+    status: {
+      type: String,
+      enum: LEAD_STATUS_KEYS,
+      default: LEAD_STATUS_DEFAULT,
     },
     createdAt: {
       type: Date,

@@ -10,15 +10,23 @@ Production-ready Node.js service that listens for incoming WhatsApp messages to 
 - **mongoose** – MongoDB ODM
 - **dotenv** – Environment variables
 - **winston** – Logging
+- **express** – Web server (dashboard + API)
+- **qrcode** – QR image for the `/qr` page
 
 ## Project structure
 
 ```
+/public
+  dashboard.html     # Leads table (sort, filter, print, statuses, EN/HE)
+  qr.html            # WhatsApp QR for scanning after deploy
 /src
-  server.js          # Entry: env, MongoDB, health endpoint, shutdown
+  server.js          # Entry: MongoDB, WhatsApp, HTTP server
+  expressApp.js      # Routes: /health, /dashboard, /qr, /api/*
   whatsappClient.js  # WhatsApp client lifecycle, reconnect, message handler
-  models/Lead.js     # Lead schema (phone, name, firstMessage, createdAt)
-  logger.js          # Winston logger
+  whatsappState.js   # In-memory QR for the web page
+  models/Lead.js     # Lead schema (+ status)
+  constants/leadStatuses.js
+  logger.js
 package.json
 .env.example
 ```
@@ -55,11 +63,16 @@ package.json
 
    On first run you’ll see a QR code in the terminal. Scan it with WhatsApp (phone linked to your Business account). The session is stored under `.wwebjs_auth` (or `WWEBJS_AUTH_PATH`) so you usually won’t need to scan again after restarts.
 
-4. **Health check**
+4. **Web UI**
+
+   - **Dashboard:** `http://localhost:3000/dashboard` — leads table (sort, filter, print), status column saved to MongoDB, English / עברית.
+   - **QR page:** `http://localhost:3000/qr` — WhatsApp QR when login is needed, or “connected” when the session is active.
+
+5. **Health check**
 
    ```bash
    curl http://localhost:3000/health
-   # {"status":"ok"}
+   # {"status":"ok","database":"connected","leadsCount":…}
    ```
 
 ## Environment variables
@@ -71,12 +84,24 @@ package.json
 | `PORT`             | No       | HTTP port (default `3000`)                                        |
 | `WWEBJS_AUTH_PATH` | No       | Directory for WhatsApp session (default `.wwebjs_auth`)            |
 | `LOG_LEVEL`        | No       | Winston level (default `info`)                                     |
+| `DASHBOARD_TOKEN`  | No       | If set, required for `/dashboard`, `/qr`, and `/api/*` (see below) |
+
+### Securing the dashboard (production)
+
+Set `DASHBOARD_TOKEN` to a long random string. Then either:
+
+- Open `/dashboard?token=YOUR_TOKEN` once (saved in browser `localStorage`), or  
+- Paste the token in the dashboard footer and click **Save**, or  
+- Send header `x-dashboard-token: YOUR_TOKEN` (or `Authorization: Bearer YOUR_TOKEN`) on API calls.
+
+`GET /health` stays **unauthenticated** for Render health checks.
 
 ## Lead schema (MongoDB)
 
 - **phone** (String, unique) – normalized (no `@c.us`)
 - **name** (String) – contact name if available
 - **firstMessage** (String) – first incoming text
+- **status** (String) – one of: `none`, `didnt_answer`, `not_interested`, `callback_later`, `waiting_more_details`, `from_me`, `waiting_client_details` (labels are EN/HE in the UI)
 - **createdAt** (Date)
 
 Only the first message per phone is stored; later messages from the same number are ignored (deduplication by `phone`).

@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>WhatsApp QR</title>
+  <style>
+    :root { --bg: #0f1419; --card: #1a2332; --text: #e7ecf3; --muted: #8b9bb4; --accent: #3b82f6; --border: #2d3a4f; }
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, Segoe UI, Roboto, sans-serif; margin: 0; background: var(--bg); color: var(--text); min-height: 100vh; }
+    body.rtl { direction: rtl; }
+    .wrap { max-width: 480px; margin: 0 auto; padding: 1.5rem; text-align: center; }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; }
+    h1 { font-size: 1.25rem; margin: 0 0 1rem; }
+    img { max-width: 100%; height: auto; border-radius: 8px; background: #fff; padding: 0.5rem; }
+    p { color: var(--muted); line-height: 1.5; font-size: 0.95rem; }
+    .ok { color: #4ade80; font-weight: 600; }
+    a { color: var(--accent); }
+    .toolbar { margin-bottom: 1rem; display: flex; justify-content: center; gap: 0.5rem; flex-wrap: wrap; }
+    button { background: var(--border); color: var(--text); border: none; padding: 0.45rem 0.85rem; border-radius: 8px; cursor: pointer; }
+    .banner { background: #422006; color: #fed7aa; padding: 0.65rem; border-radius: 8px; margin-bottom: 1rem; font-size: 0.9rem; text-align: start; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="toolbar">
+      <a href="/dashboard" id="dashLink">Dashboard</a>
+      <button type="button" id="btnLang">עב / EN</button>
+    </div>
+    <div class="banner hidden" id="authBanner"></div>
+    <div class="card">
+      <h1 id="title">WhatsApp login</h1>
+      <p id="sub">Scan with WhatsApp → Linked devices</p>
+      <div id="content"></div>
+    </div>
+  </div>
+  <script>
+(function () {
+  const T = {
+    en: {
+      title: "WhatsApp login",
+      sub: "Open WhatsApp on your phone → Settings → Linked devices → Link a device, then scan the code below.",
+      connected: "Connected — session is active.",
+      waiting: "Starting… If a new login is required, a QR code will appear here.",
+      disconnected: "Disconnected. A new QR may appear shortly — keep this page open.",
+      dash: "Dashboard",
+      authHint: "Unauthorized. Open /qr?token=YOUR_TOKEN or save token on the dashboard.",
+    },
+    he: {
+      title: "התחברות לוואטסאפ",
+      sub: "בטלפון: וואטסאפ → הגדרות → מכשירים מקושרים → קישור מכשיר, וסרקו את הקוד למטה.",
+      connected: "מחובר — הסשן פעיל.",
+      waiting: "מתחיל… אם נדרשת התחברות מחדש, יופיע כאן קוד QR.",
+      disconnected: "מנותק. עשוי להופיע QR חדש בקרוב — השאירו את הדף פתוח.",
+      dash: "לוח בקרה",
+      authHint: "אין הרשאה. פתחו /qr?token=... או שמרו טוקן בלוח הבקרה.",
+    },
+  };
+  function lang() { return localStorage.getItem("dashLang") || "en"; }
+  function t(k) { return T[lang()][k] || k; }
+  function applyLang() {
+    document.documentElement.lang = lang();
+    document.body.classList.toggle("rtl", lang() === "he");
+    document.getElementById("title").textContent = t("title");
+    document.getElementById("sub").textContent = t("sub");
+    document.getElementById("dashLink").textContent = t("dash");
+    const tok = getToken();
+    document.getElementById("dashLink").href = "/dashboard" + (tok ? "?token=" + encodeURIComponent(tok) : "");
+  }
+  function getToken() {
+    const q = new URLSearchParams(location.search).get("token");
+    if (q) {
+      localStorage.setItem("dashboardToken", q);
+      history.replaceState({}, "", location.pathname);
+    }
+    return localStorage.getItem("dashboardToken") || "";
+  }
+  function headers() {
+    const h = { Accept: "application/json" };
+    const tok = getToken();
+    if (tok) h["x-dashboard-token"] = tok;
+    return h;
+  }
+  const el = document.getElementById("content");
+  let timer;
+  async function poll() {
+    try {
+      const res = await fetch("/api/whatsapp/qr", { headers: headers() });
+      if (res.status === 401) {
+        document.getElementById("authBanner").textContent = t("authHint");
+        document.getElementById("authBanner").classList.remove("hidden");
+        el.innerHTML = "";
+        return;
+      }
+      document.getElementById("authBanner").classList.add("hidden");
+      const data = await res.json();
+      if (data.ready) {
+        el.innerHTML = '<p class="ok">' + escapeHtml(t("connected")) + "</p>";
+        return;
+      }
+      if (data.qrDataUrl) {
+        el.innerHTML = '<img src="' + data.qrDataUrl + '" alt="QR code" width="320" height="320" />';
+        return;
+      }
+      let msg = t("waiting");
+      if (data.lastDisconnectReason) msg = t("disconnected");
+      el.innerHTML = "<p>" + escapeHtml(msg) + "</p>";
+    } catch {
+      el.innerHTML = "<p>" + escapeHtml(t("waiting")) + "</p>";
+    }
+  }
+  function escapeHtml(s) {
+    const d = document.createElement("div");
+    d.textContent = s;
+    return d.innerHTML;
+  }
+  document.getElementById("btnLang").addEventListener("click", () => {
+    localStorage.setItem("dashLang", lang() === "en" ? "he" : "en");
+    applyLang();
+  });
+  getToken();
+  applyLang();
+  poll();
+  timer = setInterval(poll, 2500);
+})();
+  </script>
+</body>
+</html>

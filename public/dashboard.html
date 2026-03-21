@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Leads</title>
+  <style>
+    :root { --bg: #0f1419; --card: #1a2332; --text: #e7ecf3; --muted: #8b9bb4; --accent: #3b82f6; --border: #2d3a4f; }
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, Segoe UI, Roboto, sans-serif; margin: 0; background: var(--bg); color: var(--text); min-height: 100vh; }
+    body.rtl { direction: rtl; }
+    .no-print { }
+    @media print {
+      .no-print { display: none !important; }
+      body { background: #fff; color: #000; }
+      table { font-size: 11px; }
+      .print-wrap { box-shadow: none !important; }
+    }
+    .wrap { max-width: 1200px; margin: 0 auto; padding: 1rem 1.25rem 3rem; }
+    .print-wrap { background: var(--card); border-radius: 12px; border: 1px solid var(--border); padding: 1rem 1.25rem; }
+    header { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; margin-bottom: 1rem; }
+    h1 { font-size: 1.35rem; margin: 0; flex: 1; min-width: 8rem; }
+    .toolbar { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+    input[type="search"], select, input[type="password"], input[type="text"] {
+      background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 0.45rem 0.65rem; border-radius: 8px; font-size: 0.9rem;
+    }
+    input[type="search"] { min-width: 12rem; }
+    button, .btn {
+      background: var(--accent); color: #fff; border: none; padding: 0.45rem 0.85rem; border-radius: 8px; cursor: pointer; font-size: 0.9rem; text-decoration: none; display: inline-block;
+    }
+    button.secondary { background: var(--border); color: var(--text); }
+    a.nav { color: var(--accent); }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: start; padding: 0.55rem 0.5rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+    th { cursor: pointer; user-select: none; color: var(--muted); font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.03em; }
+    th:hover { color: var(--text); }
+    th.sorted::after { content: " ▲"; opacity: 0.6; font-size: 0.7em; }
+    th.sorted.desc::after { content: " ▼"; }
+    select.status-select { min-width: 11rem; max-width: 100%; }
+    .msg { white-space: pre-wrap; word-break: break-word; max-width: 22rem; font-size: 0.88rem; }
+    .banner { background: #422006; color: #fed7aa; padding: 0.65rem 1rem; border-radius: 8px; margin-bottom: 1rem; font-size: 0.9rem; }
+    .token-row { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border); font-size: 0.85rem; color: var(--muted); }
+    .hidden { display: none !important; }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="no-print banner hidden" id="authBanner" role="alert"></div>
+    <header class="no-print">
+      <h1 id="pageTitle">Leads</h1>
+      <div class="toolbar">
+        <label><span class="sr-only" id="searchLabel">Search</span>
+          <input type="search" id="search" placeholder="" autocomplete="off" aria-labelledby="searchLabel" />
+        </label>
+        <label><span class="sr-only" id="filterLabel">Status</span>
+          <select id="statusFilter" aria-labelledby="filterLabel"></select>
+        </label>
+        <button type="button" id="btnPrint" class="secondary">Print</button>
+        <button type="button" id="btnLang" class="secondary" aria-label="Toggle language">עב / EN</button>
+        <a class="btn secondary nav" id="linkQr" href="/qr">QR</a>
+      </div>
+    </header>
+    <div class="print-wrap" id="printArea">
+      <div id="empty" class="hidden" style="color:var(--muted);padding:1rem;">—</div>
+      <table id="table" class="hidden">
+        <thead>
+          <tr>
+            <th data-sort="phone" id="thPhone">Phone</th>
+            <th data-sort="name" id="thName">Name</th>
+            <th data-sort="firstMessage" id="thMsg">Message</th>
+            <th data-sort="status" id="thStatus">Status</th>
+            <th data-sort="createdAt" id="thDate">Created</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+    <div class="no-print token-row">
+      <label><span id="tokenLabel">Access token (if required)</span>
+        <input type="password" id="tokenInput" style="margin-inline-start:0.5rem;width:14rem;" autocomplete="off" />
+        <button type="button" id="btnSaveToken" class="secondary" style="margin-inline-start:0.35rem;">Save</button>
+      </label>
+    </div>
+  </div>
+  <script>
+(function () {
+  const STATUS_KEYS = ["none", "didnt_answer", "not_interested", "callback_later", "waiting_more_details", "from_me", "waiting_client_details"];
+
+  const T = {
+    en: {
+      title: "Leads",
+      phone: "Phone",
+      name: "Name",
+      firstMessage: "First message",
+      status: "Status",
+      createdAt: "Created",
+      searchPh: "Search phone, name, message…",
+      filterStatus: "All statuses",
+      print: "Print",
+      linkQr: "WhatsApp QR",
+      noLeads: "No leads yet.",
+      loadError: "Could not load leads.",
+      authHint: "Add ?token=YOUR_TOKEN to the URL once, or save the token below and reload.",
+      tokenLabel: "Access token (if server uses DASHBOARD_TOKEN)",
+      saveToken: "Save",
+      statuses: {
+        none: "—",
+        didnt_answer: "Didn't answer",
+        not_interested: "Not interested",
+        callback_later: "Call back later",
+        waiting_more_details: "Waiting for more details",
+        from_me: "From me",
+        waiting_client_details: "Waiting for more details from the client",
+      },
+    },
+    he: {
+      title: "לידים",
+      phone: "טלפון",
+      name: "שם",
+      firstMessage: "הודעה ראשונה",
+      status: "סטטוס",
+      createdAt: "נוצר",
+      searchPh: "חיפוש טלפון, שם, הודעה…",
+      filterStatus: "כל הסטטוסים",
+      print: "הדפסה",
+      linkQr: "QR וואטסאפ",
+      noLeads: "אין לידים עדיין.",
+      noMatches: "אין תוצאות לפי הסינון.",
+      loadError: "לא ניתן לטעון לידים.",
+      authHint: "הוסיפו ?token=... לכתובת פעם אחת, או שמרו את הטוקן למטה ורעננו.",
+      tokenLabel: "טוקן גישה (אם השרת משתמש ב-DASHBOARD_TOKEN)",
+      saveToken: "שמור",
+      statuses: {
+        none: "—",
+        didnt_answer: "לא ענה",
+        not_interested: "לא מעוניין",
+        callback_later: "להתקשר יותר מאוחר",
+        waiting_more_details: "ממתין לפרטים נוספים",
+        from_me: "ממני",
+        waiting_client_details: "אני ממתין לפרטים נוספים מהלקוח",
+      },
+    },
+  };
+
+  function getLang() {
+    return localStorage.getItem("dashLang") || "en";
+  }
+  function setLang(l) {
+    localStorage.setItem("dashLang", l);
+    document.documentElement.lang = l;
+    document.body.classList.toggle("rtl", l === "he");
+    applyI18n();
+  }
+  function t(key) {
+    const l = getLang();
+    const parts = key.split(".");
+    let o = T[l];
+    for (const p of parts) o = o && o[p];
+    return o != null ? o : key;
+  }
+  function statusLabel(key) {
+    return T[getLang()].statuses[key] || key;
+  }
+
+  function applyI18n() {
+    document.getElementById("pageTitle").textContent = t("title");
+    document.getElementById("thPhone").textContent = t("phone");
+    document.getElementById("thName").textContent = t("name");
+    document.getElementById("thMsg").textContent = t("firstMessage");
+    document.getElementById("thStatus").textContent = t("status");
+    document.getElementById("thDate").textContent = t("createdAt");
+    document.getElementById("search").placeholder = t("searchPh");
+    document.getElementById("btnPrint").textContent = t("print");
+    document.getElementById("linkQr").textContent = t("linkQr");
+    document.getElementById("tokenLabel").textContent = t("tokenLabel");
+    document.getElementById("btnSaveToken").textContent = t("saveToken");
+    const ff = document.getElementById("statusFilter");
+    const cur = ff.value;
+    ff.innerHTML = "";
+    const opt0 = document.createElement("option");
+    opt0.value = "";
+    opt0.textContent = t("filterStatus");
+    ff.appendChild(opt0);
+    STATUS_KEYS.forEach((k) => {
+      const o = document.createElement("option");
+      o.value = k;
+      o.textContent = statusLabel(k);
+      ff.appendChild(o);
+    });
+    ff.value = cur;
+    renderTable();
+  }
+
+  function getToken() {
+    const q = new URLSearchParams(location.search).get("token");
+    if (q) {
+      localStorage.setItem("dashboardToken", q);
+      history.replaceState({}, "", location.pathname);
+    }
+    return localStorage.getItem("dashboardToken") || "";
+  }
+
+  function authHeaders() {
+    const tok = getToken();
+    const h = { Accept: "application/json", "Content-Type": "application/json" };
+    if (tok) h["x-dashboard-token"] = tok;
+    return h;
+  }
+
+  let leads = [];
+  let sortKey = "createdAt";
+  let sortDir = "desc";
+
+  function sortLeads(list) {
+    const dir = sortDir === "asc" ? 1 : -1;
+    return [...list].sort((a, b) => {
+      let va = a[sortKey];
+      let vb = b[sortKey];
+      if (sortKey === "createdAt") {
+        va = new Date(va).getTime();
+        vb = new Date(vb).getTime();
+      } else {
+        va = String(va || "").toLowerCase();
+        vb = String(vb || "").toLowerCase();
+      }
+      if (va < vb) return -1 * dir;
+      if (va > vb) return 1 * dir;
+      return 0;
+    });
+  }
+
+  function filteredLeads() {
+    const q = document.getElementById("search").value.trim().toLowerCase();
+    const sf = document.getElementById("statusFilter").value;
+    return leads.filter((row) => {
+      if (sf && (row.status || "none") !== sf) return false;
+      if (!q) return true;
+      const blob = [row.phone, row.name, row.firstMessage].join(" ").toLowerCase();
+      return blob.includes(q);
+    });
+  }
+
+  function renderTable() {
+    const rows = sortLeads(filteredLeads());
+    const tbody = document.getElementById("tbody");
+    const table = document.getElementById("table");
+    const empty = document.getElementById("empty");
+    document.querySelectorAll("th[data-sort]").forEach((th) => {
+      th.classList.remove("sorted", "desc");
+      if (th.dataset.sort === sortKey) {
+        th.classList.add("sorted");
+        if (sortDir === "desc") th.classList.add("desc");
+      }
+    });
+    if (!leads.length) {
+      table.classList.add("hidden");
+      empty.classList.remove("hidden");
+      empty.textContent = t("noLeads");
+      return;
+    }
+    if (!rows.length) {
+      table.classList.add("hidden");
+      tbody.innerHTML = "";
+      empty.classList.remove("hidden");
+      empty.textContent = t("noMatches");
+      return;
+    }
+    empty.classList.add("hidden");
+    table.classList.remove("hidden");
+    tbody.innerHTML = rows
+      .map((row) => {
+        const id = row._id;
+        const st = row.status || "none";
+        const opts = STATUS_KEYS.map(
+          (k) => `<option value="${k}"${k === st ? " selected" : ""}>${escapeHtml(statusLabel(k))}</option>`
+        ).join("");
+        const date = row.createdAt ? new Date(row.createdAt).toLocaleString() : "";
+        return `<tr data-id="${id}">
+          <td>${escapeHtml(row.phone || "")}</td>
+          <td>${escapeHtml(row.name || "")}</td>
+          <td class="msg">${escapeHtml(row.firstMessage || "")}</td>
+          <td><select class="status-select" data-id="${id}" aria-label="${escapeHtml(t("status"))}">${opts}</select></td>
+          <td>${escapeHtml(date)}</td>
+        </tr>`;
+      })
+      .join("");
+    tbody.querySelectorAll(".status-select").forEach((sel) => {
+      sel.addEventListener("change", onStatusChange);
+    });
+  }
+
+  function escapeHtml(s) {
+    const d = document.createElement("div");
+    d.textContent = s;
+    return d.innerHTML;
+  }
+
+  async function onStatusChange(e) {
+    const sel = e.target;
+    const id = sel.dataset.id;
+    const status = sel.value;
+    sel.disabled = true;
+    try {
+      const res = await fetch("/api/leads/" + id, {
+        method: "PATCH",
+        headers: authHeaders(),
+        body: JSON.stringify({ status }),
+      });
+      if (!res.ok) throw new Error(String(res.status));
+      const data = await res.json();
+      const idx = leads.findIndex((l) => l._id === id);
+      if (idx >= 0) leads[idx] = data.lead;
+    } catch (err) {
+      alert(t("loadError"));
+      await loadLeads();
+    } finally {
+      sel.disabled = false;
+    }
+  }
+
+  async function loadLeads() {
+    const banner = document.getElementById("authBanner");
+    banner.classList.add("hidden");
+    try {
+      const res = await fetch("/api/leads", { headers: authHeaders() });
+      if (res.status === 401) {
+        banner.textContent = t("authHint");
+        banner.classList.remove("hidden");
+        leads = [];
+        renderTable();
+        return;
+      }
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      leads = data.leads || [];
+      renderTable();
+    } catch {
+      leads = [];
+      document.getElementById("empty").classList.remove("hidden");
+      document.getElementById("empty").textContent = t("loadError");
+      document.getElementById("table").classList.add("hidden");
+    }
+  }
+
+  document.getElementById("btnLang").addEventListener("click", () => {
+    setLang(getLang() === "en" ? "he" : "en");
+  });
+  document.getElementById("search").addEventListener("input", renderTable);
+  document.getElementById("statusFilter").addEventListener("change", renderTable);
+  document.getElementById("btnPrint").addEventListener("click", () => window.print());
+  document.querySelectorAll("th[data-sort]").forEach((th) => {
+    th.addEventListener("click", () => {
+      const k = th.dataset.sort;
+      if (sortKey === k) sortDir = sortDir === "asc" ? "desc" : "asc";
+      else {
+        sortKey = k;
+        sortDir = k === "createdAt" ? "desc" : "asc";
+      }
+      renderTable();
+    });
+  });
+  document.getElementById("btnSaveToken").addEventListener("click", () => {
+    const v = document.getElementById("tokenInput").value.trim();
+    if (v) localStorage.setItem("dashboardToken", v);
+    document.getElementById("tokenInput").value = "";
+    updateQrLink();
+    loadLeads();
+  });
+  function updateQrLink() {
+    const a = document.getElementById("linkQr");
+    const tok = getToken();
+    a.href = "/qr" + (tok ? "?token=" + encodeURIComponent(tok) : "");
+  }
+
+  const initialLang = getLang();
+  document.documentElement.lang = initialLang;
+  document.body.classList.toggle("rtl", initialLang === "he");
+  document.getElementById("tokenInput").value = "";
+  applyI18n();
+  getToken();
+  updateQrLink();
+  loadLeads();
+})();
+  </script>
+</body>
+</html>

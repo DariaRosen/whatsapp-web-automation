@@ -2,12 +2,12 @@
  * WhatsApp Listener Service – entry point.
  *
  * Deploy to Render:
- * - Use Web Service (for /health) or Background Worker.
+ * - Use Web Service (for /health, /dashboard, /qr).
  * - Start command: npm start
- * - Set env: MONGO_URL (or MONGO_URI) and optionally DB_NAME, PORT, WWEBJS_AUTH_PATH.
+ * - Set env: MONGO_URL (or MONGO_URI), optionally DB_NAME, PORT, WWEBJS_AUTH_PATH.
+ * - Optional DASHBOARD_TOKEN: require ?token= or x-dashboard-token for /dashboard, /qr, /api/*
  * - Attach a persistent Disk and set WWEBJS_AUTH_PATH=/data/.wwebjs_auth
- *   so the WhatsApp session survives restarts and redeploys.
- * - Health path: GET /health → { status: "ok" }
+ * - Health path: GET /health
  */
 require("dotenv").config();
 require("dotenv").config({ path: ".env.local", override: true });
@@ -17,16 +17,14 @@ const mongoose = require("mongoose");
 const logger = require("./logger");
 const Lead = require("./models/Lead");
 const { initializeClient, destroyClient } = require("./whatsappClient");
+const { createExpressApp } = require("./expressApp");
 
 const PORT = Number(process.env.PORT) || 3000;
 const MONGO_URL = process.env.MONGO_URL || process.env.MONGO_URI || "mongodb://localhost:27017/whatsapp-leads";
 const DB_NAME = process.env.DB_NAME || null;
 
 let isShuttingDown = false;
-
-// ---------------------------------------------------------------------------
-// Global error handlers (prevent crashes from uncaught errors)
-// ---------------------------------------------------------------------------
+let httpServer = null;
 
 process.on("uncaughtException", (err) => {
   logger.error("uncaughtException: " + (err?.message || String(err)));
@@ -44,10 +42,6 @@ process.on("unhandledRejection", (reason, promise) => {
   }
 });
 
-// ---------------------------------------------------------------------------
-// MongoDB
-// ---------------------------------------------------------------------------
-
 async function connectMongo() {
   const options = DB_NAME ? { dbName: DB_NAME } : {};
   await mongoose.connect(MONGO_URL, options);
@@ -62,10 +56,6 @@ async function disconnectMongo() {
     logger.error("MongoDB disconnect error: " + err.message);
   }
 }
-
-// ---------------------------------------------------------------------------
-// Lead deduplication and save (called from WhatsApp message handler)
-// ---------------------------------------------------------------------------
 
 async function handleNewLead(data) {
   const { phone, name, firstMessage } = data;
@@ -88,42 +78,18 @@ async function handleNewLead(data) {
   }
 }
 
-// ---------------------------------------------------------------------------
-// HTTP health endpoint (for Render and load balancers)
-// ---------------------------------------------------------------------------
-
-const server = http.createServer(async (req, res) => {
-  if (req.method === "GET" && (req.url === "/health" || req.url === "/")) {
-    const dbConnected = mongoose.connection.readyState === 1;
-    const payload = {
-      status: dbConnected ? "ok" : "degraded",
-      database: dbConnected ? "connected" : "disconnected",
-    };
-    if (dbConnected) {
-      try {
-        payload.leadsCount = await Lead.countDocuments();
-      } catch (err) {
-        payload.leadsCount = null;
-        payload.dbError = err.message;
-      }
-    }
-    res.writeHead(dbConnected ? 200 : 503, { "Content-Type": "application/json" });
-    res.end(JSON.stringify(payload));
-    return;
-  }
-  res.writeHead(404);
-  res.end();
-});
-
-// ---------------------------------------------------------------------------
-// Graceful shutdown
-// ---------------------------------------------------------------------------
-
 async function shutdown() {
   if (isShuttingDown) return;
   isShuttingDown = true;
   logger.info("Shutting down...");
-  server.close(() => logger.info("HTTP server closed"));
+  if (httpServer) {
+    await new Promise((resolve) => {
+      httpServer.close(() => {
+        logger.info("HTTP server closed");
+        resolve();
+      });
+    });
+  }
   destroyClient();
   await disconnectMongo();
 }
@@ -136,18 +102,17 @@ process.on("SIGTERM", () => {
   shutdown().finally(() => process.exit(0));
 });
 
-// ---------------------------------------------------------------------------
-// Start
-// ---------------------------------------------------------------------------
-
 async function main() {
   logger.info("Service starting");
 
   await connectMongo();
   initializeClient(handleNewLead);
 
-  server.listen(PORT, () => {
-    logger.info("Health endpoint listening on port " + PORT + " (GET /health)");
+  const app = createExpressApp();
+  httpServer = http.createServer(app);
+  httpServer.listen(PORT, () => {
+    logger.info("Server listening on port " + PORT);
+    logger.info("Dashboard: GET /dashboard  |  QR: GET /qr  |  Health: GET /health");
   });
 }
 
