@@ -125,6 +125,7 @@ function initializeClient(onNewLead) {
   onNewLeadCallback = onNewLead;
 
   const authPath = process.env.WWEBJS_AUTH_PATH || ".wwebjs_auth";
+  /** Extra flags help on low-RAM hosts (e.g. 512MB Render); Chromium still needs ~300MB+ for WhatsApp Web. */
   const puppeteerOpts = {
     headless: true,
     args: [
@@ -135,6 +136,13 @@ function initializeClient(onNewLead) {
       "--no-first-run",
       "--no-zygote",
       "--disable-gpu",
+      "--disable-extensions",
+      "--disable-background-networking",
+      "--disable-default-apps",
+      "--disable-sync",
+      "--disable-translate",
+      "--mute-audio",
+      "--memory-pressure-off",
     ],
   };
   if (process.env.PUPPETEER_EXECUTABLE_PATH) {
