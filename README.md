@@ -145,7 +145,7 @@ Only the first message per phone is stored for **active** leads; later messages 
 ## Deploying to Render
 
 - **Service type**: Use a **Web Service** (so Render can hit `GET /health` for liveness) or a **Background Worker** if you only need the process to run and don’t care about HTTP.
-- **Build**: `npm install` (or leave default).
+- **Build**: `npm install` (or leave default). This runs **`postinstall`**, which downloads **Chrome for Puppeteer** into `./.cache/puppeteer` (required — `whatsapp-web.js` needs a real browser). If the build times out, increase the build timeout or use a larger instance. To skip the download locally, use `SKIP_PUPPETEER_CHROME=1 npm install` (WhatsApp will not work until you run `npm run install-chrome`).
 - **Start**: `npm start` (runs `node src/server.js`).
 - **Environment**: In Render dashboard, set `MONGO_URL` (and optionally `DB_NAME`, `PORT`; Render sets `PORT` for Web Services).
 - **Persistent disk (important)**:

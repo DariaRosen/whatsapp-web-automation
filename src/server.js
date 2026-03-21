@@ -12,6 +12,13 @@
 require("dotenv").config();
 require("dotenv").config({ path: ".env.local", override: true });
 
+/** Puppeteer must find the same Chrome as postinstall (project .cache); see scripts/install-puppeteer-chrome.js */
+const path = require("path");
+const defaultPuppeteerCache = path.join(__dirname, "..", ".cache", "puppeteer");
+if (!process.env.PUPPETEER_CACHE_DIR) {
+  process.env.PUPPETEER_CACHE_DIR = defaultPuppeteerCache;
+}
+
 const http = require("http");
 const mongoose = require("mongoose");
 const logger = require("./logger");
